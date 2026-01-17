@@ -3,7 +3,8 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection } from 'firebase/firestore';
 
-// --- CONFIGURACIÓN FIREBASE (MANDATORY PATTERN) ---
+// --- CONFIGURACIÓN FIREBASE (API) ---
+// Se utiliza la configuración inyectada por el entorno para conectar con la base de datos
 const firebaseConfig = JSON.parse(__firebase_config);
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -27,7 +28,8 @@ export default function App() {
   const pieInstance = useRef(null);
   const barInstance = useRef(null);
 
-  // 1. Autenticación Firebase
+  // 1. Autenticación Firebase (MANDATORY PATTERN)
+  // Es vital autenticarse antes de intentar leer/escribir en la base de datos
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -46,11 +48,12 @@ export default function App() {
   }, []);
 
   // 2. Sincronización de Datos (Firestore -> App)
+  // Escucha cambios en tiempo real en la base de datos para actualizar el dashboard
   useEffect(() => {
     if (!user) return;
 
     // Usamos una colección pública para este ejemplo de dashboard compartido
-    // Regla 1: Strict Paths -> /artifacts/{appId}/public/data/{collectionName}
+    // Ruta estricta: /artifacts/{appId}/public/data/{collectionName}
     const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
 
     const unsubscribe = onSnapshot(dataRef, (docSnap) => {
@@ -241,14 +244,17 @@ export default function App() {
       const workbook = XLSX.read(data, {type: 'array'});
       const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
       
-      let colIndices = { name: 0, sales: 1 }; 
+      // Lógica de detección inteligente de columnas
+      let colIndices = { name: 0, sales: 1 }; // Default: Columna A es nombre, Columna B es venta
       const headers = jsonData[0]; 
       
       if (headers && Array.isArray(headers)) {
         headers.forEach((h, idx) => {
           const txt = String(h).toLowerCase();
-          if (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente')) colIndices.name = idx;
-          if (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales')) colIndices.sales = idx;
+          // Detectar columna de nombre
+          if (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente') || txt.includes('vendedor')) colIndices.name = idx;
+          // Detectar columna de ventas
+          if (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales') || txt.includes('importe')) colIndices.sales = idx;
         });
       }
 
@@ -263,17 +269,20 @@ export default function App() {
       }
 
       if(newAgents.length > 0) {
-        // ACTUALIZAR FIRESTORE
+        // ACTUALIZAR FIRESTORE (GUARDAR EN BASE DE DATOS)
         if (user) {
           try {
              // Rule 1: /artifacts/{appId}/public/data/{collectionName}
             const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
             await setDoc(dataRef, { agents: newAgents });
-            alert("Datos importados y guardados en la nube correctamente.");
+            // Feedback visual simple
+            alert("✅ Datos importados y guardados en la nube correctamente.");
           } catch (err) {
             console.error(err);
-            alert("Error al guardar en la nube.");
+            alert("❌ Error al guardar en la nube.");
           }
+        } else {
+            alert("⏳ Esperando conexión con la base de datos...");
         }
       }
     };
@@ -305,7 +314,6 @@ export default function App() {
   const fmtMoney = (n) => '$' + n.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
 
   // --- ESTILOS EN LINEA (Reemplazo de <style>) ---
-  // Nota: Usamos una constante de estilo para inyectar CSS custom que no es Tailwind
   const customStyles = `
     :root { --primary: #0f172a; --accent: #f59e0b; --glass: rgba(255, 255, 255, 0.85); }
     body { font-family: 'Plus Jakarta Sans', sans-serif; background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); color: #1e293b; min-height: 100vh; }
