@@ -1,1 +1,660 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive Operations Dashboard - Control de Metas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: {
+                            800: '#1e3a8a',
+                            900: '#0f172a', 
+                        },
+                        amber: {
+                            400: '#fbbf24',
+                            500: '#f59e0b',
+                            600: '#d97706',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --primary: #0f172a; /* Navy */
+            --accent: #f59e0b;  /* Amber */
+            --glass: rgba(255, 255, 255, 0.85);
+        }
 
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: #1e293b; 
+            min-height: 100vh;
+        }
+
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 20px;
+            box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05); /* Navy shadow tint */
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 30px -4px rgba(245, 158, 11, 0.15); /* Amber glow */
+            border-color: rgba(245, 158, 11, 0.3);
+        }
+        
+        .status-badge {
+            @apply px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5;
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.8s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .metric-mini-exec {
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            border-radius: 16px;
+            padding: 1rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .metric-mini-exec:hover {
+            border-color: var(--accent);
+            background: #fff;
+        }
+    </style>
+</head>
+<body class="p-4 lg:p-8">
+
+    <div class="max-w-7xl mx-auto space-y-6 animate-fade-in">
+        
+        <!-- Header Dinámico -->
+        <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+            <div class="space-y-1">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-slate-900 rounded-xl shadow-lg shadow-slate-900/20">
+                        <i class="ph-fill ph-chart-line-up text-amber-500 text-2xl"></i>
+                    </div>
+                    <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">Executive Dashboard</h1>
+                </div>
+                <p class="text-slate-500 font-medium ml-12">Performance Analytics & Control de Metas</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-4 bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex flex-col px-4 border-r border-slate-200">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase">Ciclo Actual</span>
+                    <span class="text-sm font-bold text-slate-900 flex items-center gap-1">
+                        <i class="ph ph-calendar text-amber-500"></i> Enero 2025
+                    </span>
+                </div>
+                <div class="flex flex-col px-4 border-r border-slate-200">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase">Progreso Tiempo</span>
+                    <span class="text-sm font-bold text-slate-900">10 / 25 <span class="text-slate-400 font-normal">Días</span></span>
+                </div>
+                <label class="group cursor-pointer px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-slate-900/30">
+                    <i class="ph ph-file-xls font-bold text-amber-500"></i>
+                    <span>Importar Datos</span>
+                    <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" class="hidden">
+                </label>
+            </div>
+        </header>
+
+        <!-- Panel de Parámetros Moderno -->
+        <section class="glass-card p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <span class="w-8 h-[3px] bg-amber-500 rounded-full"></span>
+                    Métricas de Control Diario
+                </h3>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div class="metric-mini-exec bg-amber-50/50 border-amber-200/50">
+                    <div class="text-[10px] font-extrabold text-amber-700 uppercase mb-1">Ritmo Esperado Hoy</div>
+                    <div class="text-2xl font-black text-amber-600" id="metric-percent-today">0%</div>
+                </div>
+                <div class="metric-mini-exec">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes x Agente</div>
+                    <div class="text-xl font-bold text-slate-800" id="metric-month-agent">$15,000</div>
+                </div>
+                <div class="metric-mini-exec">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día x Agente</div>
+                    <div class="text-xl font-bold text-slate-800" id="metric-daily-agent">$0</div>
+                </div>
+                <div class="metric-mini-exec">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes Call Center</div>
+                    <div class="text-xl font-bold text-slate-800" id="metric-month-cc">$0</div>
+                </div>
+                <div class="metric-mini-exec">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día Call Center</div>
+                    <div class="text-xl font-bold text-slate-800" id="metric-daily-cc">$0</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Top/Bottom Products (Nueva Sección) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Top 3 Productos -->
+            <div class="glass-card p-5 border-l-4 border-l-amber-500">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="p-1.5 bg-amber-100 rounded text-amber-600">
+                        <i class="ph-fill ph-trophy"></i>
+                    </div>
+                    <h3 class="text-xs font-black text-slate-500 uppercase tracking-widest">Top 3 Productos Más Vendidos</h3>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-white/50 hover:bg-white transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg font-black text-slate-300">01</span>
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Plan Premium Anual</p>
+                                <p class="text-[10px] text-slate-400">Categoría: Suscripción</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded">+15% vs LY</span>
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-white/50 hover:bg-white transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg font-black text-slate-300">02</span>
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Seguro Protección Total</p>
+                                <p class="text-[10px] text-slate-400">Categoría: Seguros</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded">+8% vs LY</span>
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-white/50 hover:bg-white transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg font-black text-slate-300">03</span>
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Asistencia Vial Plus</p>
+                                <p class="text-[10px] text-slate-400">Categoría: Servicios</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded">+4% vs LY</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom 3 Productos -->
+            <div class="glass-card p-5 border-l-4 border-l-slate-400">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="p-1.5 bg-slate-100 rounded text-slate-600">
+                        <i class="ph-fill ph-trend-down"></i>
+                    </div>
+                    <h3 class="text-xs font-black text-slate-500 uppercase tracking-widest">3 Productos Menos Vendidos</h3>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-white/50 hover:bg-white transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg font-black text-slate-300">01</span>
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Plan Básico Mensual</p>
+                                <p class="text-[10px] text-slate-400">Rotación Lenta</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded">-12% vs LY</span>
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-white/50 hover:bg-white transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg font-black text-slate-300">02</span>
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Tarjeta Regalo Digital</p>
+                                <p class="text-[10px] text-slate-400">Baja Demanda</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded">-5% vs LY</span>
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-white/50 hover:bg-white transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg font-black text-slate-300">03</span>
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Accesorio Promocional</p>
+                                <p class="text-[10px] text-slate-400">Stock Estancado</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded">-2% vs LY</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Histórico Visual (MOVIDO AQUÍ) -->
+        <div class="glass-card p-8">
+            <div class="flex items-center justify-between mb-8">
+                <h3 class="font-extrabold text-slate-800 flex items-center gap-2">
+                    <i class="ph ph-trend-up text-amber-500 text-xl"></i>
+                    Evolución Anual Comparativa
+                </h3>
+                <span class="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-3 py-1 rounded-full">Incluye Variación %</span>
+            </div>
+            <div class="h-80 w-full">
+                <canvas id="historicalChart"></canvas>
+            </div>
+        </div>
+
+        <!-- KPI Principal Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="kpi-container">
+            <!-- Cargado por JS -->
+        </div>
+
+        <!-- Secciones de Análisis -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Columna Izquierda: Tabla y Comparativo -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Tabla Ejecutiva -->
+                <div class="glass-card overflow-hidden">
+                    <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-white/40">
+                        <h2 class="font-extrabold text-slate-800 flex items-center gap-2">
+                            <i class="ph ph-users-four text-amber-500 text-xl"></i>
+                            Ranking de Operaciones
+                        </h2>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead>
+                                <tr class="text-[10px] text-slate-400 uppercase tracking-widest bg-slate-50/50">
+                                    <th class="px-8 py-4 font-black">Asesor Comercial</th>
+                                    <th class="px-6 py-4 font-black text-right">Venta Real</th>
+                                    <th class="px-6 py-4 font-black text-right">Brecha Meta</th>
+                                    <th class="px-6 py-4 font-black text-center">Cumplimiento</th>
+                                    <th class="px-8 py-4 font-black text-center">Estatus</th>
+                                </tr>
+                            </thead>
+                            <tbody id="agents-table-body" class="divide-y divide-slate-100">
+                                <!-- Cargado por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Columna Derecha: Gráfico de Pastel y Rankings -->
+            <div class="space-y-6">
+                <!-- Market Share -->
+                <div class="glass-card p-8 flex flex-col items-center">
+                    <div class="w-full mb-6">
+                        <h3 class="font-extrabold text-slate-800 flex items-center gap-2">
+                            <i class="ph ph-chart-pie-slice text-amber-500 text-xl"></i>
+                            Market Share Interno
+                        </h3>
+                    </div>
+                    
+                    <div class="relative w-full aspect-square max-w-[260px]">
+                        <canvas id="performanceChart"></canvas>
+                    </div>
+                    
+                    <div class="mt-8 w-full p-6 rounded-2xl bg-slate-900 text-center text-white shadow-xl shadow-slate-900/30 ring-1 ring-white/10">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Volumen Total Operado</p>
+                        <p class="text-4xl font-black text-white" id="total-sales-display">$0</p>
+                    </div>
+                </div>
+
+                <!-- Ranking Departamental (Nuevo) -->
+                <div class="glass-card p-6">
+                    <div class="w-full mb-4 flex items-center justify-between">
+                        <h3 class="font-extrabold text-slate-800 flex items-center gap-2 text-sm">
+                            <i class="ph ph-buildings text-amber-500 text-lg"></i>
+                            Ranking Departamentos
+                        </h3>
+                    </div>
+                    <div class="space-y-4">
+                         <!-- Dept 1 -->
+                        <div class="relative">
+                            <div class="flex justify-between items-end mb-1">
+                                <span class="text-xs font-bold text-slate-700">1. Ventas Outbound</span>
+                                <span class="text-xs font-black text-slate-900">$145,200</span>
+                            </div>
+                            <div class="w-full bg-slate-100 rounded-full h-2">
+                                <div class="bg-slate-900 h-2 rounded-full w-[85%]"></div>
+                            </div>
+                        </div>
+                        <!-- Dept 2 -->
+                        <div class="relative">
+                            <div class="flex justify-between items-end mb-1">
+                                <span class="text-xs font-bold text-slate-700">2. Retención</span>
+                                <span class="text-xs font-black text-slate-900">$98,400</span>
+                            </div>
+                            <div class="w-full bg-slate-100 rounded-full h-2">
+                                <div class="bg-amber-500 h-2 rounded-full w-[60%]"></div>
+                            </div>
+                        </div>
+                        <!-- Dept 3 -->
+                        <div class="relative">
+                            <div class="flex justify-between items-end mb-1">
+                                <span class="text-xs font-bold text-slate-700">3. Soporte / Upsell</span>
+                                <span class="text-xs font-black text-slate-900">$45,100</span>
+                            </div>
+                            <div class="w-full bg-slate-100 rounded-full h-2">
+                                <div class="bg-slate-400 h-2 rounded-full w-[35%]"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Configuración Global Estética
+        Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+        Chart.defaults.color = "#64748b";
+
+        const config = {
+            daysTotal: 25,
+            daysElapsed: 10,
+            goalAgentFixed: 15000
+        };
+
+        let agentsData = [
+            { name: "Jackeline Hernández", sales: 693.00 },
+            { name: "Kimberly Tuñón", sales: 12286.92 },
+            { name: "Asley Ortega", sales: 7846.06 }
+        ];
+
+        let pieChartInstance = null;
+        let barChartInstance = null;
+
+        function renderDashboard(agents) {
+            const totalAgents = agents.length;
+            const targetPercentToday = config.daysElapsed / config.daysTotal;
+            const goalMonthAgent = config.goalAgentFixed;
+            const goalDailyAgent = goalMonthAgent / config.daysTotal;
+            const goalMonthCC = goalMonthAgent * totalAgents;
+            const goalDailyCC = goalMonthCC / config.daysTotal;
+
+            const processedAgents = agents.map(agent => {
+                const percent = agent.sales / goalMonthAgent;
+                return {
+                    ...agent,
+                    goal: goalMonthAgent,
+                    diff: agent.sales - goalMonthAgent,
+                    percent: percent
+                };
+            });
+
+            // Ordenar por ventas mayor a menor
+            processedAgents.sort((a, b) => b.sales - a.sales);
+
+            const totalSales = processedAgents.reduce((acc, curr) => acc + curr.sales, 0);
+            const fmtMoney = (n) => '$' + n.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+
+            // Actualizar Métricas Top
+            document.getElementById('metric-percent-today').innerText = (targetPercentToday * 100).toFixed(0) + '%';
+            document.getElementById('metric-month-agent').innerText = fmtMoney(goalMonthAgent);
+            document.getElementById('metric-daily-agent').innerText = fmtMoney(goalDailyAgent);
+            document.getElementById('metric-month-cc').innerText = fmtMoney(goalMonthCC);
+            document.getElementById('metric-daily-cc').innerText = fmtMoney(goalDailyCC);
+            document.getElementById('total-sales-display').innerText = '$' + totalSales.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+            // Render KPI Cards
+            const goalCCToday = goalDailyCC * config.daysElapsed;
+            const isCCAhead = totalSales >= goalCCToday;
+            
+            document.getElementById('kpi-container').innerHTML = `
+                <div class="glass-card p-6 border-l-4 ${isCCAhead ? 'border-l-amber-500' : 'border-l-rose-500'}">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Venta vs Cuota Hoy</p>
+                    <div class="flex items-end gap-2">
+                        <span class="text-3xl font-black text-slate-900">${fmtMoney(totalSales)}</span>
+                        <span class="text-xs font-bold text-slate-400 mb-1.5">/ ${fmtMoney(goalCCToday)}</span>
+                    </div>
+                    <div class="mt-4 flex items-center gap-2">
+                         <span class="status-badge ${isCCAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}">
+                            <i class="ph-fill ${isCCAhead ? 'ph-trend-up' : 'ph-trend-down'}"></i>
+                            ${isCCAhead ? 'Sobre Cuota' : 'Bajo Cuota'}
+                         </span>
+                    </div>
+                </div>
+                <div class="glass-card p-6 border-l-4 border-l-blue-800">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Run Rate Cierre</p>
+                    <div class="flex items-end gap-2">
+                        <span class="text-3xl font-black text-slate-900">${fmtMoney(totalSales / config.daysElapsed * config.daysTotal)}</span>
+                    </div>
+                    <div class="mt-4">
+                        <span class="text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full uppercase">Proyección Estimada</span>
+                    </div>
+                </div>
+                <div class="glass-card p-6 border-l-4 border-l-slate-900">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Saldo Pendiente</p>
+                    <div class="flex items-end gap-2">
+                        <span class="text-3xl font-black text-slate-900">${fmtMoney(Math.max(0, goalMonthCC - totalSales))}</span>
+                    </div>
+                    <div class="mt-4">
+                        <span class="text-xs font-bold text-slate-500">Faltan ${config.daysTotal - config.daysElapsed} días hábiles</span>
+                    </div>
+                </div>
+            `;
+
+            // Tabla de Agentes Estilizada (Navy & Amber)
+            const tableBody = document.getElementById('agents-table-body');
+            tableBody.innerHTML = '';
+            processedAgents.forEach((agent, index) => {
+                const percentage = agent.percent * 100;
+                const isAhead = agent.percent >= targetPercentToday;
+                
+                // Colores para el ranking top 3
+                let rankColor = 'bg-slate-100 text-slate-600';
+                if(index === 0) rankColor = 'bg-amber-100 text-amber-700 ring-2 ring-amber-400';
+                if(index === 1) rankColor = 'bg-slate-200 text-slate-700';
+                if(index === 2) rankColor = 'bg-orange-100 text-orange-800';
+
+                tableBody.innerHTML += `
+                    <tr class="group transition-all hover:bg-white/60">
+                        <td class="px-8 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full ${rankColor} flex items-center justify-center text-xs font-bold transition-all">
+                                    ${index + 1}
+                                </div>
+                                <span class="font-bold text-slate-700 tracking-tight">${agent.name}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-right font-bold text-slate-900">$${agent.sales.toLocaleString('en-US')}</td>
+                        <td class="px-6 py-4 text-right font-bold ${agent.diff >= 0 ? 'text-amber-600' : 'text-rose-500'}">
+                            ${agent.diff >= 0 ? '+' : ''}${Math.round(agent.diff).toLocaleString('en-US')}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex flex-col items-center gap-1.5">
+                                <div class="w-32 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                                    <div class="bg-slate-900 h-1.5 rounded-full transition-all duration-1000" style="width: ${Math.min(percentage, 100)}%"></div>
+                                </div>
+                                <span class="text-[10px] font-black text-slate-500">${percentage.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                        <td class="px-8 py-4 flex justify-center">
+                            <span class="status-badge ${isAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-50 text-rose-600'}">
+                                <i class="ph-fill ${isAhead ? 'ph-check-circle' : 'ph-warning-circle'}"></i>
+                                ${isAhead ? 'Objetivo OK' : 'En Alerta'}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            // Chart: Pie Moderno (Navy & Amber Palette)
+            const ctxPie = document.getElementById('performanceChart').getContext('2d');
+            if (pieChartInstance) pieChartInstance.destroy();
+            pieChartInstance = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: processedAgents.map(a => a.name.split(' ')[0]),
+                    datasets: [{
+                        data: processedAgents.map(a => a.sales),
+                        backgroundColor: ['#0f172a', '#f59e0b', '#334155', '#fbbf24', '#94a3b8'],
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+
+            // Chart: Bar Histórico con Plugin de Crecimiento %
+            const ctxBar = document.getElementById('historicalChart').getContext('2d');
+            if (barChartInstance) barChartInstance.destroy();
+            
+            // Plugin personalizado para dibujar porcentajes encima de las barras
+            const growthLabelPlugin = {
+                id: 'growthLabel',
+                afterDatasetsDraw(chart, args, options) {
+                    const { ctx } = chart;
+                    
+                    chart.data.datasets.forEach((dataset, datasetIndex) => {
+                        const meta = chart.getDatasetMeta(datasetIndex);
+                        
+                        meta.data.forEach((element, index) => {
+                            // Empezamos desde el indice 1 (2024) para comparar con el anterior
+                            if (index > 0) {
+                                const currentVal = dataset.data[index];
+                                const prevVal = dataset.data[index - 1];
+                                
+                                // Calculo de crecimiento
+                                let growth = 0;
+                                if (prevVal !== 0) {
+                                    growth = ((currentVal - prevVal) / prevVal) * 100;
+                                }
+
+                                const x = element.x;
+                                const y = element.y;
+                                
+                                ctx.save();
+                                ctx.textAlign = 'center';
+                                ctx.font = 'bold 11px "Plus Jakarta Sans"';
+                                
+                                // Determinar color y texto
+                                const text = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
+                                ctx.fillStyle = growth >= 0 ? '#059669' : '#e11d48'; // Verde o Rojo para el indicador
+                                
+                                // Dibujar fondo pequeño para el texto
+                                // ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                                // ctx.fillRect(x - 15, y - 25, 30, 15);
+
+                                // Dibujar texto un poco arriba de la barra
+                                ctx.fillText(text, x, y - 8);
+                                ctx.restore();
+                            }
+                        });
+                    });
+                }
+            };
+
+            barChartInstance = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: ['2023', '2024', '2025 (PROY)'],
+                    datasets: processedAgents.slice(0, 4).map((agent, i) => ({ // Solo top 4 para no saturar
+                        label: agent.name.split(' ')[0],
+                        data: [
+                            agent.sales * 0.8, // Simulación 2023
+                            agent.sales * 0.9, // Simulación 2024
+                            agent.sales * 1.15 // Simulación 2025
+                        ],
+                        backgroundColor: i === 0 ? '#f59e0b' : (i % 2 === 0 ? '#0f172a' : '#475569'), // Amber para el Top 1, Navy/Slate para otros
+                        borderRadius: 6,
+                        barPercentage: 0.6,
+                        categoryPercentage: 0.8
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { 
+                            beginAtZero: true, 
+                            grid: { color: '#f1f5f9', drawBorder: false },
+                            ticks: { callback: v => '$' + v/1000 + 'k', color: '#94a3b8', font: {size: 10} },
+                            border: { display: false }
+                        },
+                        x: { 
+                            grid: { display: false },
+                            ticks: { color: '#64748b', font: {weight: 'bold'} }
+                        }
+                    },
+                    plugins: {
+                        legend: { 
+                            position: 'bottom', 
+                            labels: { boxWidth: 8, usePointStyle: true, padding: 20, font: {size: 11} } 
+                        },
+                        tooltip: {
+                            backgroundColor: '#0f172a',
+                            padding: 12,
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 12 },
+                            cornerRadius: 8,
+                            displayColors: false
+                        }
+                    }
+                },
+                plugins: [growthLabelPlugin] // Activamos el plugin aquí
+            });
+        }
+
+        // Lógica de carga Excel (Mantiene la corrección de columnas)
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
+                
+                let colIndices = { name: 0, sales: 1 }; 
+                const headers = jsonData[0]; 
+                
+                if (headers && Array.isArray(headers)) {
+                    headers.forEach((h, idx) => {
+                        const txt = String(h).toLowerCase();
+                        if (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente')) colIndices.name = idx;
+                        if (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales')) colIndices.sales = idx;
+                    });
+                }
+
+                const newAgents = [];
+                for(let i = 1; i < jsonData.length; i++) {
+                    const row = jsonData[i];
+                    if (!row || !row[colIndices.name]) continue;
+                    newAgents.push({
+                        name: String(row[colIndices.name]).trim(),
+                        sales: parseFloat(String(row[colIndices.sales]).replace(/[^0-9.-]+/g,"")) || 0
+                    });
+                }
+                if(newAgents.length > 0) renderDashboard(newAgents);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        renderDashboard(agentsData);
+    </script>
+</body>
+</html>
