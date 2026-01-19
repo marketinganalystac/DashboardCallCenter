@@ -975,101 +975,112 @@ export default function App() {
              </div>
           ) : (
             <>
-              {/* CONTENIDO DASHBOARD */}
+              {/* CONTENIDO DASHBOARD - LAYOUT REESTRUCTURADO */}
               
-              {/* 1. Panel de Parámetros */}
-              <section className="glass-card p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                    <span className="w-8 h-[3px] bg-amber-500 rounded-full"></span>
-                    Métricas de Control Diario
-                  </h3>
-                  <div className="text-xs font-bold text-slate-400">
-                     Días Laborales: {daysTotal} | Transcurridos: {daysElapsed}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                  <div className="metric-mini-exec bg-amber-50/50 border-amber-200/50">
-                    <div className="text-[10px] font-extrabold text-amber-700 uppercase mb-1">Ritmo Esperado Hoy</div>
-                    <div className="text-2xl font-black text-amber-600">{(targetPercentToday * 100).toFixed(0)}%</div>
-                  </div>
-                  <div className="metric-mini-exec">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes x Agente</div>
-                    <div className="text-xl font-bold text-slate-800">{fmtMoney(goalMonthAgent)}</div>
-                  </div>
-                  <div className="metric-mini-exec">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día x Agente</div>
-                    <div className="text-xl font-bold text-slate-800">{fmtMoney(goalDailyAgent)}</div>
-                  </div>
-                  <div className="metric-mini-exec">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes Call Center</div>
-                    <div className="text-xl font-bold text-slate-800">{fmtMoney(goalMonthCC)}</div>
-                  </div>
-                  <div className="metric-mini-exec">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día Call Center</div>
-                    <div className="text-xl font-bold text-slate-800">{fmtMoney(goalDailyCC)}</div>
-                  </div>
-                </div>
-              </section>
-
-              {/* 2. KPI Principal Grid + Market Share (Ahora en la misma fila) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 
-                {/* KPI 1 */}
-                <div className={`glass-card p-6 border-l-4 ${isCCAhead ? 'border-l-amber-500' : 'border-l-rose-500'}`}>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Venta vs Cuota Hoy</p>
-                  <div className="flex items-end gap-2">
-                    <span className="text-3xl font-black text-slate-900">{fmtMoney(totalSales)}</span>
-                    <span className="text-xs font-bold text-slate-400 mb-1.5">/ {fmtMoney(goalCCToday)}</span>
-                  </div>
-                  <div className="mt-4 flex items-center gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isCCAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
-                      <i className={`ph-fill ${isCCAhead ? 'ph-trend-up' : 'ph-trend-down'}`}></i>
-                      {isCCAhead ? 'Sobre Cuota' : 'Bajo Cuota'}
-                    </span>
-                  </div>
+                {/* COLUMNA IZQUIERDA (3 SPAN): Métricas y KPIs */}
+                <div className="lg:col-span-3 flex flex-col gap-6">
+                    
+                    {/* 1. Panel de Parámetros */}
+                    <section className="glass-card p-6">
+                        <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                            <span className="w-8 h-[3px] bg-amber-500 rounded-full"></span>
+                            Métricas de Control Diario
+                        </h3>
+                        <div className="text-xs font-bold text-slate-400">
+                            Días Laborales: {daysTotal} | Transcurridos: {daysElapsed}
+                        </div>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div className="metric-mini-exec bg-amber-50/50 border-amber-200/50">
+                            <div className="text-[10px] font-extrabold text-amber-700 uppercase mb-1">Ritmo Esperado Hoy</div>
+                            <div className="text-2xl font-black text-amber-600">{(targetPercentToday * 100).toFixed(0)}%</div>
+                        </div>
+                        <div className="metric-mini-exec">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes x Agente</div>
+                            <div className="text-xl font-bold text-slate-800">{fmtMoney(goalMonthAgent)}</div>
+                        </div>
+                        <div className="metric-mini-exec">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día x Agente</div>
+                            <div className="text-xl font-bold text-slate-800">{fmtMoney(goalDailyAgent)}</div>
+                        </div>
+                        <div className="metric-mini-exec">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes Call Center</div>
+                            <div className="text-xl font-bold text-slate-800">{fmtMoney(goalMonthCC)}</div>
+                        </div>
+                        <div className="metric-mini-exec">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día Call Center</div>
+                            <div className="text-xl font-bold text-slate-800">{fmtMoney(goalDailyCC)}</div>
+                        </div>
+                        </div>
+                    </section>
+
+                    {/* 2. KPI Principales Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* KPI 1 */}
+                        <div className={`glass-card p-6 border-l-4 ${isCCAhead ? 'border-l-amber-500' : 'border-l-rose-500'}`}>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Venta vs Cuota Hoy</p>
+                            <div className="flex items-end gap-2">
+                                <span className="text-3xl font-black text-slate-900">{fmtMoney(totalSales)}</span>
+                                <span className="text-xs font-bold text-slate-400 mb-1.5">/ {fmtMoney(goalCCToday)}</span>
+                            </div>
+                            <div className="mt-4 flex items-center gap-2">
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isCCAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                                <i className={`ph-fill ${isCCAhead ? 'ph-trend-up' : 'ph-trend-down'}`}></i>
+                                {isCCAhead ? 'Sobre Cuota' : 'Bajo Cuota'}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* KPI 2 */}
+                        <div className="glass-card p-6 border-l-4 border-l-blue-800">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Run Rate Cierre</p>
+                            <div className="flex items-end gap-2">
+                                <span className="text-3xl font-black text-slate-900">{fmtMoney(daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0)}</span>
+                            </div>
+                            <div className="mt-4">
+                                <span className="text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full uppercase">Proyección Estimada</span>
+                            </div>
+                        </div>
+
+                        {/* KPI 3 */}
+                        <div className="glass-card p-6 border-l-4 border-l-slate-900">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Saldo Pendiente</p>
+                            <div className="flex items-end gap-2">
+                                <span className="text-3xl font-black text-slate-900">{fmtMoney(Math.max(0, goalMonthCC - totalSales))}</span>
+                            </div>
+                            <div className="mt-4">
+                                <span className="text-xs font-bold text-slate-500">Faltan {daysTotal - daysElapsed} días hábiles</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                {/* KPI 2 */}
-                <div className="glass-card p-6 border-l-4 border-l-blue-800">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Run Rate Cierre</p>
-                  <div className="flex items-end gap-2">
-                    <span className="text-3xl font-black text-slate-900">{fmtMoney(daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0)}</span>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full uppercase">Proyección Estimada</span>
-                  </div>
-                </div>
-
-                {/* KPI 3 */}
-                <div className="glass-card p-6 border-l-4 border-l-slate-900">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Saldo Pendiente</p>
-                  <div className="flex items-end gap-2">
-                    <span className="text-3xl font-black text-slate-900">{fmtMoney(Math.max(0, goalMonthCC - totalSales))}</span>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-xs font-bold text-slate-500">Faltan {daysTotal - daysElapsed} días hábiles</span>
-                  </div>
-                </div>
-
-                {/* KPI 4 - Market Share (Movido Aquí) */}
-                <div className="glass-card p-4 flex flex-col items-center justify-between">
-                   <div className="w-full text-center mb-2">
-                      <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Market Share Interno</h3>
-                   </div>
-                   <div className="relative h-24 w-24">
-                      <canvas ref={pieChartRef}></canvas>
-                   </div>
-                   <div className="mt-2 text-center">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total Operado</p>
-                      <p className="text-lg font-black text-slate-800">${totalSales.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
-                   </div>
+                {/* COLUMNA DERECHA (1 SPAN): Market Share (Ocupa 2 filas height) */}
+                <div className="lg:col-span-1">
+                     <div className="glass-card p-6 h-full flex flex-col items-center justify-center">
+                        <div className="w-full text-center mb-6">
+                            <h3 className="font-extrabold text-slate-800 flex items-center justify-center gap-2">
+                                <i className="ph ph-chart-pie-slice text-amber-500 text-xl"></i>
+                                Market Share Interno
+                            </h3>
+                        </div>
+                        <div className="relative w-full aspect-square max-w-[220px]">
+                            <canvas ref={pieChartRef}></canvas>
+                        </div>
+                        <div className="mt-8 w-full p-4 rounded-xl bg-slate-900 text-center text-white shadow-xl shadow-slate-900/30 ring-1 ring-white/10">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Volumen Total Operado</p>
+                            <p className="text-2xl font-black text-white">${totalSales.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
+                        </div>
+                    </div>
                 </div>
 
               </div>
-
-              {/* 3. Ventas Día a Día (Movido Debajo de KPIs) */}
-              <section className="glass-card p-6">
+              
+              {/* 3. Ventas Día a Día (Debajo de KPIs y Market Share) */}
+              <section className="glass-card p-6 mt-6">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
                       <i className="ph ph-chart-line-up text-amber-500 text-xl"></i>
@@ -1086,7 +1097,7 @@ export default function App() {
               </section>
 
               {/* 4. Secciones de Análisis (Full Width) */}
-              <div className="space-y-8">
+              <div className="space-y-8 mt-8">
                 
                 {/* Histórico Visual */}
                 <div className="glass-card p-8">
@@ -1168,7 +1179,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 5. NUEVO: Análisis de Categorías (Top 3 Mas / Menos Vendida) */}
+                {/* 5. NUEVO: Análisis de Categorías L2 (Top 3 Mas / Menos Vendida) */}
                 {top3Categories.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Top 3 Más Vendida */}
@@ -1176,14 +1187,14 @@ export default function App() {
                         <div className="p-4 border-b border-slate-100 bg-emerald-50/50">
                              <h3 className="font-bold text-emerald-800 flex items-center gap-2">
                                 <i className="ph-fill ph-trophy text-emerald-600"></i>
-                                Top 3 Categorías Más Vendidas
+                                Top 3 Categoria_L2 Más Vendidas
                              </h3>
                         </div>
                         <div className="p-0">
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
                                     <tr>
-                                        <th className="px-4 py-2 text-left">Categoría</th>
+                                        <th className="px-4 py-2 text-left">Categoria_L2</th>
                                         <th className="px-4 py-2 text-right">Cant.</th>
                                         <th className="px-4 py-2 text-right">Ventas</th>
                                     </tr>
@@ -1206,14 +1217,14 @@ export default function App() {
                         <div className="p-4 border-b border-slate-100 bg-rose-50/50">
                              <h3 className="font-bold text-rose-800 flex items-center gap-2">
                                 <i className="ph-fill ph-trend-down text-rose-600"></i>
-                                Top 3 Categorías Menos Vendidas
+                                Top 3 Categoria_L2 Menos Vendidas
                              </h3>
                         </div>
                         <div className="p-0">
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
                                     <tr>
-                                        <th className="px-4 py-2 text-left">Categoría</th>
+                                        <th className="px-4 py-2 text-left">Categoria_L2</th>
                                         <th className="px-4 py-2 text-right">Cant.</th>
                                         <th className="px-4 py-2 text-right">Ventas</th>
                                     </tr>
