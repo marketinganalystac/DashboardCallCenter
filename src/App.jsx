@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { getAnalytics } from "firebase/analytics";
 
 // --- CONFIGURACIÓN FIREBASE ---
-// 1. TU CONFIGURACIÓN (Para producción/exportación)
 const userFirebaseConfig = {
   apiKey: "AIzaSyAY5PNoQqvkMVOgInqpn4tkIAdFFcKQZx0",
   authDomain: "dashboardcallcenter-6d8cf.firebaseapp.com",
@@ -16,9 +15,6 @@ const userFirebaseConfig = {
   measurementId: "G-DQT1X9X1C4"
 };
 
-// 2. CONFIGURACIÓN DEL ENTORNO (Requerido para que funcione la previsualización aquí)
-// Nota: Se usa __firebase_config para evitar errores de permisos en este editor. 
-// Si exportas el archivo, puedes cambiar 'firebaseConfig' por 'userFirebaseConfig'.
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userFirebaseConfig;
 
 // Inicialización
@@ -35,41 +31,169 @@ try {
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
+// --- COMPONENTE DE LOGIN ---
+const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await onLoginEmail(email, password, isRegistering);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Decorativo */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 to-slate-800 z-0"></div>
+      <div className="absolute top-[-10%] right-[-5%] w-96 h-96 bg-amber-500/20 rounded-full blur-3xl animate-pulse"></div>
+      <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl"></div>
+
+      <div className="glass-card w-full max-w-md p-8 relative z-10 bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-slate-900 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-black/20">
+             <i className="ph-fill ph-chart-polar text-amber-500 text-3xl"></i>
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-1">Bienvenido</h1>
+          <p className="text-slate-400 text-sm">Executive Dashboard Access</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="p-3 bg-rose-500/20 border border-rose-500/50 rounded-lg text-rose-200 text-xs text-center">
+              {error}
+            </div>
+          )}
+          
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-300 uppercase ml-1">Email Corporativo</label>
+            <div className="relative">
+              <i className="ph-duotone ph-envelope absolute left-3 top-3 text-slate-400"></i>
+              <input 
+                type="email" 
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-600"
+                placeholder="ejemplo@empresa.com"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-300 uppercase ml-1">Contraseña</label>
+            <div className="relative">
+              <i className="ph-duotone ph-lock-key absolute left-3 top-3 text-slate-400"></i>
+              <input 
+                type="password" 
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-600"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-amber-500/25 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
+          >
+            {loading ? <i className="ph ph-spinner animate-spin"></i> : <i className="ph-bold ph-sign-in"></i>}
+            {isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
+          </button>
+        </form>
+
+        <div className="mt-6 pt-6 border-t border-white/10 flex flex-col gap-4">
+           <button 
+            onClick={onLoginGuest}
+            className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-slate-300 text-sm font-medium transition-all flex items-center justify-center gap-2 group"
+          >
+            <i className="ph-duotone ph-user-circle text-lg group-hover:text-white"></i>
+            Acceso Invitado (Demo)
+          </button>
+          
+          <button 
+            onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
+            className="text-xs text-slate-500 hover:text-amber-400 transition-colors text-center"
+          >
+            {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿Nuevo usuario? Regístrate aquí'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- COMPONENTE PRINCIPAL ---
 export default function App() {
-  // Estado INICIAL VACÍO (sin datos dummy)
   const [agents, setAgents] = useState([]); 
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Carga inicial de auth
+  const [dataLoading, setDataLoading] = useState(false); // Carga de datos
 
-  // Refs para los gráficos y charts
   const pieChartRef = useRef(null);
   const barChartRef = useRef(null);
   const pieInstance = useRef(null);
   const barInstance = useRef(null);
 
-  // 1. Autenticación Firebase
+  // 1. Monitor de Estado de Autenticación
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Auth error:", error);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
+    });
     return () => unsubscribe();
   }, []);
 
-  // 2. Sincronización de Datos (Firestore -> App)
+  // 2. Funciones de Login
+  const handleLoginGuest = async () => {
+    setLoading(true);
+    try {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    } catch (error) {
+      console.error("Auth error:", error);
+      alert("Error al iniciar como invitado: " + error.message);
+      setLoading(false);
+    }
+  };
+
+  const handleLoginEmail = async (email, password, isRegistering) => {
+    if (isRegistering) {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } else {
+      await signInWithEmailAndPassword(auth, email, password);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setAgents([]); // Limpiar datos al salir
+    } catch (error) {
+      console.error("Error signing out: ", error);
+    }
+  };
+
+  // 3. Sincronización de Datos (Firestore -> App)
   useEffect(() => {
     if (!user) return;
-
+    
+    setDataLoading(true);
     // Ruta estricta para guardar/leer datos: /artifacts/{appId}/public/data/{collectionName}
     const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
 
@@ -80,19 +204,18 @@ export default function App() {
           setAgents(data.agents);
         }
       } else {
-        // Si no hay datos en la base, nos aseguramos que esté vacío
         setAgents([]);
       }
-      setLoading(false);
+      setDataLoading(false);
     }, (error) => {
       console.error("Firestore error:", error);
-      setLoading(false);
+      setDataLoading(false);
     });
 
     return () => unsubscribe();
   }, [user]);
 
-  // 3. Cargar Scripts Externos
+  // 4. Cargar Scripts Externos
   useEffect(() => {
     // Inject Tailwind Config
     const tailwindConfigScript = document.createElement('script');
@@ -110,12 +233,10 @@ export default function App() {
     `;
     document.head.appendChild(tailwindConfigScript);
 
-    // Inject External Libraries
     const loadScript = (src) => {
       return new Promise((resolve, reject) => {
         if (document.querySelector(`script[src="${src}"]`)) {
-          resolve();
-          return;
+          resolve(); return;
         }
         const script = document.createElement('script');
         script.src = src;
@@ -132,10 +253,9 @@ export default function App() {
     ]).then(() => {
       updateCharts();
     });
-
   }, []);
 
-  // 4. Lógica de Renderizado de Gráficos
+  // 5. Lógica de Renderizado de Gráficos
   useEffect(() => {
     if (typeof Chart === 'undefined') return;
     updateCharts();
@@ -143,11 +263,8 @@ export default function App() {
 
   const updateCharts = () => {
     if (typeof Chart === 'undefined') return;
-    
-    // Si no hay agentes, no renderizamos gráficos
     if (agents.length === 0) return;
 
-    // Configuración Global
     Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
     Chart.defaults.color = "#64748b";
 
@@ -156,7 +273,6 @@ export default function App() {
     // --- PIE CHART ---
     if (pieChartRef.current) {
       if (pieInstance.current) pieInstance.current.destroy();
-      
       const ctxPie = pieChartRef.current.getContext('2d');
       pieInstance.current = new Chart(ctxPie, {
         type: 'doughnut',
@@ -181,7 +297,6 @@ export default function App() {
     // --- BAR CHART ---
     if (barChartRef.current) {
       if (barInstance.current) barInstance.current.destroy();
-
       const growthLabelPlugin = {
         id: 'growthLabel',
         afterDatasetsDraw(chart) {
@@ -194,7 +309,6 @@ export default function App() {
                 const prevVal = dataset.data[index - 1];
                 let growth = 0;
                 if (prevVal !== 0) growth = ((currentVal - prevVal) / prevVal) * 100;
-                
                 const x = element.x;
                 const y = element.y;
                 ctx.save();
@@ -217,11 +331,7 @@ export default function App() {
           labels: ['2023', '2024', '2025 (PROY)'],
           datasets: processedAgents.slice(0, 4).map((agent, i) => ({
             label: agent.name.split(' ')[0],
-            data: [
-              agent.sales * 0.8,
-              agent.sales * 0.9,
-              agent.sales * 1.15
-            ],
+            data: [ agent.sales * 0.8, agent.sales * 0.9, agent.sales * 1.15 ],
             backgroundColor: i === 0 ? '#f59e0b' : (i % 2 === 0 ? '#0f172a' : '#475569'),
             borderRadius: 6,
             barPercentage: 0.6,
@@ -232,16 +342,8 @@ export default function App() {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            y: { 
-              beginAtZero: true, 
-              grid: { color: '#f1f5f9', drawBorder: false },
-              ticks: { callback: v => '$' + v/1000 + 'k', color: '#94a3b8', font: {size: 10} },
-              border: { display: false }
-            },
-            x: { 
-              grid: { display: false },
-              ticks: { color: '#64748b', font: {weight: 'bold'} }
-            }
+            y: { beginAtZero: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { callback: v => '$' + v/1000 + 'k', color: '#94a3b8', font: {size: 10} }, border: { display: false } },
+            x: { grid: { display: false }, ticks: { color: '#64748b', font: {weight: 'bold'} } }
           },
           plugins: {
             legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true, padding: 20, font: {size: 11} } },
@@ -253,7 +355,7 @@ export default function App() {
     }
   };
 
-  // 5. Manejo de Archivo Excel
+  // Manejo de Archivo Excel
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file || typeof XLSX === 'undefined') return;
@@ -264,16 +366,13 @@ export default function App() {
       const workbook = XLSX.read(data, {type: 'array'});
       const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
       
-      // Lógica de detección inteligente de columnas
       let colIndices = { name: 0, sales: 1 }; 
       const headers = jsonData[0]; 
       
       if (headers && Array.isArray(headers)) {
         headers.forEach((h, idx) => {
           const txt = String(h).toLowerCase();
-          // Detectar variaciones de Nombre
           if (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente') || txt.includes('vendedor')) colIndices.name = idx;
-          // Detectar variaciones de Venta
           if (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales') || txt.includes('importe')) colIndices.sales = idx;
         });
       }
@@ -289,7 +388,6 @@ export default function App() {
       }
 
       if(newAgents.length > 0) {
-        // ACTUALIZAR FIRESTORE
         if (user) {
           try {
             const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
@@ -309,23 +407,18 @@ export default function App() {
     reader.readAsArrayBuffer(file);
   };
 
-  // --- CÁLCULOS (Solo si hay datos) ---
+  // Cálculos
   const config = { daysTotal: 25, daysElapsed: 10, goalAgentFixed: 15000 };
   const targetPercentToday = config.daysElapsed / config.daysTotal;
   const goalMonthAgent = config.goalAgentFixed;
   const goalDailyAgent = goalMonthAgent / config.daysTotal;
   const totalAgents = agents.length;
-  const goalMonthCC = goalMonthAgent * (totalAgents || 1); // Evitar division por cero en visuales
+  const goalMonthCC = goalMonthAgent * (totalAgents || 1); 
   const goalDailyCC = goalMonthCC / config.daysTotal;
 
   const processedAgents = agents.map(agent => {
     const percent = agent.sales / goalMonthAgent;
-    return {
-      ...agent,
-      goal: goalMonthAgent,
-      diff: agent.sales - goalMonthAgent,
-      percent: percent
-    };
+    return { ...agent, goal: goalMonthAgent, diff: agent.sales - goalMonthAgent, percent: percent };
   }).sort((a, b) => b.sales - a.sales);
 
   const totalSales = processedAgents.reduce((acc, curr) => acc + curr.sales, 0);
@@ -353,6 +446,26 @@ export default function App() {
     }
   `;
 
+  // --- RENDER CONDICIONAL ---
+  
+  if (loading) {
+     return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-900">
+           <i className="ph ph-spinner animate-spin text-amber-500 text-4xl"></i>
+        </div>
+     );
+  }
+
+  if (!user) {
+    return (
+        <>
+            <style>{customStyles}</style>
+            <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+            <LoginScreen onLoginGuest={handleLoginGuest} onLoginEmail={handleLoginEmail} />
+        </>
+    );
+  }
+
   return (
     <>
       <style>{customStyles}</style>
@@ -379,6 +492,14 @@ export default function App() {
                 <span>Importar Datos</span>
                 <input type="file" onChange={handleFileUpload} accept=".xlsx, .xls, .csv" className="hidden" />
               </label>
+              
+              <button 
+                onClick={handleLogout}
+                className="px-4 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 rounded-xl text-sm font-bold transition-all flex items-center gap-2"
+                title="Cerrar Sesión"
+              >
+                <i className="ph-bold ph-sign-out"></i>
+              </button>
             </div>
           </header>
 
@@ -390,16 +511,15 @@ export default function App() {
                 </div>
                 <h2 className="text-2xl font-bold text-slate-700">Comencemos</h2>
                 <p className="text-slate-500 max-w-md">
-                    No hay datos cargados en el sistema. Sube tu archivo Excel para visualizar las métricas y guardarlas en la nube.
+                    {dataLoading ? "Cargando datos de la nube..." : "No hay datos cargados en el sistema. Sube tu archivo Excel para visualizar las métricas."}
                 </p>
-                <label className="cursor-pointer px-8 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-500/30 transition-all flex items-center gap-2">
-                    <i className="ph-bold ph-upload-simple"></i>
-                    Subir Archivo Excel
-                    <input type="file" onChange={handleFileUpload} accept=".xlsx, .xls, .csv" className="hidden" />
-                </label>
-                <p className="text-xs text-slate-400 mt-4">
-                    Columnas requeridas: "Asesor" y "Venta"
-                </p>
+                {!dataLoading && (
+                    <label className="cursor-pointer px-8 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-500/30 transition-all flex items-center gap-2">
+                        <i className="ph-bold ph-upload-simple"></i>
+                        Subir Archivo Excel
+                        <input type="file" onChange={handleFileUpload} accept=".xlsx, .xls, .csv" className="hidden" />
+                    </label>
+                )}
              </div>
           ) : (
             <>
