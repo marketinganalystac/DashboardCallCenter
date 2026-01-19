@@ -173,23 +173,22 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
 
 // --- COMPONENTE PRINCIPAL ---
 export default function App() {
-  const [agents, setAgents] = useState([]); 
+  const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [] });
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // Carga inicial de auth
-  const [dataLoading, setDataLoading] = useState(false); // Carga de datos de Firestore
+  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   
-  // Nuevos estados para UI de carga y confirmación
-  const [isUploading, setIsUploading] = useState(false); // Subida de archivo
+  const [isUploading, setIsUploading] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
   const [notification, setNotification] = useState(null);
 
   const pieChartRef = useRef(null);
   const barChartRef = useRef(null);
-  const lineChartRef = useRef(null); // Referencia para el nuevo gráfico de línea
+  const lineChartRef = useRef(null);
   const pieInstance = useRef(null);
   const barInstance = useRef(null);
-  const lineInstance = useRef(null); // Instancia para el gráfico de línea
+  const lineInstance = useRef(null);
   const fileInputRef = useRef(null);
 
   const showNotification = (msg, type = 'success') => {
@@ -197,7 +196,6 @@ export default function App() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // 1. Monitor de Estado de Autenticación
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -206,7 +204,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Funciones de Login
   const handleLoginGuest = async () => {
     setLoading(true);
     try {
@@ -233,13 +230,12 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setAgents([]);
+      setMetrics({ agents: [], annual: [], daily: [] });
     } catch (error) {
       console.error("Error signing out: ", error);
     }
   };
 
-  // 3. Sincronización de Datos (Firestore -> App)
   useEffect(() => {
     if (!user) return;
     
@@ -249,11 +245,14 @@ export default function App() {
     const unsubscribe = onSnapshot(dataRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.agents && Array.isArray(data.agents)) {
-          setAgents(data.agents);
-        }
+        // Recuperar estructura completa
+        setMetrics({
+            agents: data.agents || [],
+            annual: data.annual || [],
+            daily: data.daily || []
+        });
       } else {
-        setAgents([]);
+        setMetrics({ agents: [], annual: [], daily: [] });
       }
       setDataLoading(false);
     }, (error) => {
@@ -264,7 +263,6 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // 4. Cargar Scripts Externos
   useEffect(() => {
     const tailwindConfigScript = document.createElement('script');
     tailwindConfigScript.text = `
@@ -313,23 +311,22 @@ export default function App() {
     });
   }, []);
 
-  // 5. Lógica de Renderizado de Gráficos
   useEffect(() => {
     if (typeof Chart === 'undefined') return;
     updateCharts();
-  }, [agents]);
+  }, [metrics]);
 
   const updateCharts = () => {
     if (typeof Chart === 'undefined') return;
-    if (agents.length === 0) return;
+    // Si no hay datos anuales, asumimos que no hay datos cargados válidos aún
+    if (metrics.annual.length === 0) return;
 
     Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
     Chart.defaults.color = "#64748b";
 
-    const processedAgents = [...agents].sort((a, b) => b.sales - a.sales);
-    const currentYear = new Date().getFullYear();
-
-    // --- PIE CHART ---
+    const processedAgents = [...metrics.agents].sort((a, b) => b.sales - a.sales);
+    
+    // --- PIE CHART (Agentes Top) ---
     if (pieChartRef.current) {
       if (pieInstance.current) pieInstance.current.destroy();
       const ctxPie = pieChartRef.current.getContext('2d');
@@ -353,10 +350,15 @@ export default function App() {
       });
     }
 
-    // --- BAR CHART (EVOLUCIÓN) ---
+    // --- BAR CHART (EVOLUCIÓN ANUAL REAL) ---
     if (barChartRef.current) {
       if (barInstance.current) barInstance.current.destroy();
       
+      // Ordenar años cronológicamente
+      const sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
+      // Tomamos los últimos 3 años disponibles (o todos si son menos de 3)
+      const displayYears = sortedYears.slice(-3);
+
       const growthLabelPlugin = {
         id: 'growthLabel',
         afterDatasetsDraw(chart) {
@@ -388,17 +390,20 @@ export default function App() {
       barInstance.current = new Chart(ctxBar, {
         type: 'bar',
         data: {
-          // Años dinámicos basados en la fecha actual
-          labels: [String(currentYear - 2), String(currentYear - 1), String(currentYear)],
-          datasets: processedAgents.slice(0, 4).map((agent, i) => ({
-            label: agent.name.split(' ')[0],
-            // Usamos el dato cargado como el año actual. Simulamos historia para mantener consistencia visual.
-            data: [ agent.sales * 0.75, agent.sales * 0.88, agent.sales ],
-            backgroundColor: i === 0 ? '#f59e0b' : (i % 2 === 0 ? '#0f172a' : '#475569'),
+          labels: displayYears.map(y => y.year),
+          datasets: [{
+            label: 'Ventas Totales',
+            data: displayYears.map(y => y.total),
+            backgroundColor: (ctx) => {
+                // Color diferente para el último año (año actual)
+                const index = ctx.dataIndex;
+                const isLast = index === displayYears.length - 1;
+                return isLast ? '#f59e0b' : '#0f172a';
+            },
             borderRadius: 6,
             barPercentage: 0.6,
             categoryPercentage: 0.8
-          }))
+          }]
         },
         options: {
           responsive: true,
@@ -408,7 +413,7 @@ export default function App() {
             x: { grid: { display: false }, ticks: { color: '#64748b', font: {weight: 'bold'} } }
           },
           plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true, padding: 20, font: {size: 11} } },
+            legend: { display: false }, 
             tooltip: { backgroundColor: '#0f172a', padding: 12, titleFont: { size: 13 }, bodyFont: { size: 12 }, cornerRadius: 8, displayColors: false }
           }
         },
@@ -416,26 +421,20 @@ export default function App() {
       });
     }
 
-    // --- LINE CHART (TENDENCIA DIARIA) ---
+    // --- LINE CHART (TENDENCIA DIARIA REAL) ---
     if (lineChartRef.current) {
         if (lineInstance.current) lineInstance.current.destroy();
         
-        // Simulación de datos diarios basada en el total para visualización
-        const daysInMonth = 30;
-        const totalSales = processedAgents.reduce((acc, curr) => acc + curr.sales, 0);
-        // Generamos una curva random pero acumulativa que llegue al total aprox
-        let currentSum = 0;
-        const dailyData = Array.from({length: daysInMonth}, (_, i) => {
-            const baseDaily = totalSales / daysInMonth;
-            const variance = baseDaily * 0.4;
-            const dailyVal = Math.max(0, baseDaily + (Math.random() * variance * 2 - variance));
-            return dailyVal;
+        // Datos diarios reales
+        const dailyDataPoints = metrics.daily; // Ya vienen ordenados y filtrados por el año actual desde processFile
+        const labels = dailyDataPoints.map(d => {
+            const date = new Date(d.date); // 'YYYY-MM-DD'
+            return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
         });
-        const labels = Array.from({length: daysInMonth}, (_, i) => `Día ${i + 1}`);
+        const dataValues = dailyDataPoints.map(d => d.total);
 
         const ctxLine = lineChartRef.current.getContext('2d');
         
-        // Plugin para línea punteada en el cursor
         const verticalLinePlugin = {
             id: 'verticalLine',
             afterDraw: (chart) => {
@@ -463,7 +462,7 @@ export default function App() {
                 labels: labels,
                 datasets: [{
                     label: 'Ventas Diarias',
-                    data: dailyData,
+                    data: dataValues,
                     borderColor: '#f59e0b',
                     backgroundColor: (context) => {
                         const ctx = context.chart.ctx;
@@ -473,13 +472,13 @@ export default function App() {
                         return gradient;
                     },
                     borderWidth: 2,
-                    pointRadius: 0,
+                    pointRadius: 2, // Mostrar puntos pequeños siempre
                     pointHoverRadius: 6,
                     pointBackgroundColor: '#fff',
                     pointBorderColor: '#f59e0b',
                     pointBorderWidth: 2,
                     fill: true,
-                    tension: 0.4
+                    tension: 0.3
                 }]
             },
             options: {
@@ -519,15 +518,6 @@ export default function App() {
                                 if (context.parsed.y !== null) {
                                     label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
                                 }
-                                // Calcular diferencia con día anterior
-                                const dataIndex = context.dataIndex;
-                                if(dataIndex > 0) {
-                                    const prev = context.dataset.data[dataIndex - 1];
-                                    const current = context.parsed.y;
-                                    const diff = ((current - prev) / prev) * 100;
-                                    const symbol = diff >= 0 ? '▲' : '▼';
-                                    label += ` (${symbol} ${Math.abs(diff).toFixed(1)}%)`;
-                                }
                                 return label;
                             }
                         }
@@ -539,18 +529,13 @@ export default function App() {
     }
   };
 
-  // --- LÓGICA DE PROCESAMIENTO DE ARCHIVO ---
-  
-  // 1. Selector de archivo (Handler inicial)
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Si ya hay agentes, pedir confirmación
-    if (agents.length > 0) {
+    if (metrics.agents.length > 0) {
       setPendingFile(file);
       setShowConfirmModal(true);
-      // Limpiamos el input para permitir seleccionar el mismo archivo si se cancela y reintenta
       e.target.value = ''; 
     } else {
       processFile(file);
@@ -558,42 +543,65 @@ export default function App() {
     }
   };
 
-  // 2. Procesar el archivo (Lectura y Guardado)
   const processFile = (file) => {
     if (typeof XLSX === 'undefined') {
         showNotification("La librería Excel no se ha cargado aún. Intenta de nuevo.", 'error');
         return;
     }
 
-    setIsUploading(true); // Activar overlay de carga
+    setIsUploading(true);
 
     const reader = new FileReader();
     reader.onload = async function(e) {
       try {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
+        const workbook = XLSX.read(data, {type: 'array', cellDates: true}); // cellDates true para parsear fechas
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false, dateNF: 'yyyy-mm-dd'}); // raw: false para obtener fechas formateadas si es necesario
         
-        let colIndices = { name: 0, sales: 1 }; 
+        let colIndices = { name: -1, sales: -1, date: -1 }; 
         const headers = jsonData[0]; 
         
         if (headers && Array.isArray(headers)) {
           headers.forEach((h, idx) => {
             const txt = String(h).toLowerCase();
-            if (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente') || txt.includes('vendedor')) colIndices.name = idx;
-            if (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales') || txt.includes('importe')) colIndices.sales = idx;
+            if (colIndices.name === -1 && (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente') || txt.includes('vendedor'))) colIndices.name = idx;
+            if (colIndices.sales === -1 && (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales') || txt.includes('importe'))) colIndices.sales = idx;
+            if (colIndices.date === -1 && (txt.includes('fecha') || txt.includes('date') || txt.includes('dia') || txt.includes('time'))) colIndices.date = idx;
           });
         }
 
-        // --- LÓGICA DE AGRUPACIÓN MODIFICADA ---
-        const agentsMap = new Map(); // Usamos un mapa para acumular ventas por nombre
+        if (colIndices.name === -1 || colIndices.sales === -1 || colIndices.date === -1) {
+             throw new Error("No se encontraron columnas requeridas (Nombre, Venta, Fecha). Revise los encabezados.");
+        }
+
+        const annualMap = new Map();
+        const dailyMap = new Map();
+        const agentsMap = new Map();
         
+        let maxYear = 0;
+
+        // Primera pasada para encontrar el año más reciente (Current Year)
+        for(let i = 1; i < jsonData.length; i++) {
+             const row = jsonData[i];
+             if (!row) continue;
+             const rawDate = row[colIndices.date];
+             if (rawDate) {
+                 const dateObj = new Date(rawDate);
+                 if (!isNaN(dateObj.getTime())) {
+                     if (dateObj.getFullYear() > maxYear) maxYear = dateObj.getFullYear();
+                 }
+             }
+        }
+        
+        if (maxYear === 0) maxYear = new Date().getFullYear(); // Fallback
+
         for(let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i];
           if (!row || !row[colIndices.name]) continue;
           
+          // Procesar Venta
           const rawSales = row[colIndices.sales];
-          // Limpieza robusta de valores numéricos
           let salesVal = 0;
           if (typeof rawSales === 'number') {
              salesVal = rawSales;
@@ -601,44 +609,77 @@ export default function App() {
              salesVal = parseFloat(rawSales.replace(/[^0-9.-]+/g,"")) || 0;
           }
 
-          const rawName = String(row[colIndices.name]).trim();
-          // Usamos una clave normalizada para asegurar que 'Juan Perez' y 'Juan Perez ' sean iguales
-          // Pero guardamos el nombre original (o el primero que encontramos) para mostrar
-          const nameKey = rawName.toLowerCase();
+          // Procesar Fecha
+          const rawDate = row[colIndices.date];
+          let dateObj = null;
+          if (rawDate instanceof Date) dateObj = rawDate;
+          else if (typeof rawDate === 'string') dateObj = new Date(rawDate);
+          
+          if (!dateObj || isNaN(dateObj.getTime())) continue;
 
-          if (agentsMap.has(nameKey)) {
-            // Si ya existe, sumamos al total actual
-            const existingAgent = agentsMap.get(nameKey);
-            existingAgent.sales += salesVal;
-            agentsMap.set(nameKey, existingAgent);
-          } else {
-            // Si no existe, creamos la entrada
-            agentsMap.set(nameKey, {
-              name: rawName,
-              sales: salesVal
-            });
+          const year = dateObj.getFullYear();
+          const dateStr = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD
+
+          // 1. Acumular Anual (Histórico completo)
+          annualMap.set(year, (annualMap.get(year) || 0) + salesVal);
+
+          // 2. Acumular Diario y Agentes (Solo Año Actual / Más reciente)
+          if (year === maxYear) {
+              dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + salesVal);
+
+              const rawName = String(row[colIndices.name]).trim();
+              const nameKey = rawName.toLowerCase();
+              if (agentsMap.has(nameKey)) {
+                const existingAgent = agentsMap.get(nameKey);
+                existingAgent.sales += salesVal;
+                agentsMap.set(nameKey, existingAgent);
+              } else {
+                agentsMap.set(nameKey, { name: rawName, sales: salesVal });
+              }
           }
         }
 
-        // Convertimos el mapa de vuelta a array
-        const newAgents = Array.from(agentsMap.values());
+        // Convertir Maps a Arrays
+        const annualArray = Array.from(annualMap, ([year, total]) => ({ year, total }));
+        const agentsArray = Array.from(agentsMap.values());
+        
+        // Rellenar huecos en días para el gráfico (si hay ventas el 1 y el 3, el 2 debe ser 0)
+        let dailyArray = [];
+        if (dailyMap.size > 0) {
+            const sortedDates = Array.from(dailyMap.keys()).sort();
+            const startDate = new Date(sortedDates[0]);
+            const endDate = new Date(sortedDates[sortedDates.length - 1]);
+            
+            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+                const dStr = d.toISOString().split('T')[0];
+                dailyArray.push({
+                    date: dStr,
+                    total: dailyMap.get(dStr) || 0
+                });
+            }
+        }
 
-        if(newAgents.length > 0) {
+        if(annualArray.length > 0) {
           if (user) {
+            const payload = {
+                agents: agentsArray,
+                annual: annualArray,
+                daily: dailyArray
+            };
             const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
-            await setDoc(dataRef, { agents: newAgents });
-            showNotification("✅ Datos agrupados y actualizados correctamente.");
+            await setDoc(dataRef, payload);
+            showNotification(`✅ Datos actualizados. Año base: ${maxYear}`);
           } else {
             showNotification("⚠️ No hay sesión activa. Recarga la página.", 'error');
           }
         } else {
-          showNotification("⚠️ El archivo no contiene datos válidos. Revisa las columnas.", 'error');
+          showNotification("⚠️ El archivo no contiene datos válidos.", 'error');
         }
       } catch (err) {
         console.error(err);
-        showNotification("❌ Error al procesar el archivo: " + err.message, 'error');
+        showNotification("❌ Error: " + err.message, 'error');
       } finally {
-        setIsUploading(false); // Desactivar overlay de carga
+        setIsUploading(false);
         setPendingFile(null);
       }
     };
@@ -651,7 +692,6 @@ export default function App() {
     reader.readAsArrayBuffer(file);
   };
 
-  // 3. Handlers de Modal
   const confirmReplace = () => {
     setShowConfirmModal(false);
     if (pendingFile) {
@@ -664,16 +704,17 @@ export default function App() {
     setPendingFile(null);
   };
 
-  // Cálculos
+  // Cálculos de KPI Globales (Basados en el año actual)
   const config = { daysTotal: 25, daysElapsed: 10, goalAgentFixed: 15000 };
   const targetPercentToday = config.daysElapsed / config.daysTotal;
   const goalMonthAgent = config.goalAgentFixed;
   const goalDailyAgent = goalMonthAgent / config.daysTotal;
-  const totalAgents = agents.length;
+  const totalAgents = metrics.agents.length;
   const goalMonthCC = goalMonthAgent * (totalAgents || 1); 
   const goalDailyCC = goalMonthCC / config.daysTotal;
 
-  const processedAgents = agents.map(agent => {
+  // Procesamiento para Tabla
+  const processedAgents = metrics.agents.map(agent => {
     const percent = agent.sales / goalMonthAgent;
     return { ...agent, goal: goalMonthAgent, diff: agent.sales - goalMonthAgent, percent: percent };
   }).sort((a, b) => b.sales - a.sales);
@@ -703,8 +744,6 @@ export default function App() {
     }
   `;
 
-  // --- RENDER CONDICIONAL ---
-  
   if (loading) {
      return (
         <div className="min-h-screen flex items-center justify-center bg-slate-900">
@@ -739,7 +778,7 @@ export default function App() {
              </div>
            </div>
            <h3 className="text-white font-bold mt-6 text-lg animate-pulse">Procesando Datos...</h3>
-           <p className="text-slate-400 text-sm mt-2">Estamos construyendo tu dashboard</p>
+           <p className="text-slate-400 text-sm mt-2">Leyendo fechas y calculando métricas</p>
         </div>
       )}
 
@@ -794,7 +833,7 @@ export default function App() {
           </header>
 
           {/* ESTADO VACIO: Mostrar Hero de Carga */}
-          {agents.length === 0 ? (
+          {metrics.agents.length === 0 ? (
              <div className="hero-upload animate-fade-in space-y-4">
                 <div className="p-6 bg-slate-100 rounded-full text-slate-400">
                     <i className="ph-duotone ph-cloud-arrow-up text-6xl"></i>
@@ -918,7 +957,7 @@ export default function App() {
                     <div className="flex items-center justify-between mb-8">
                       <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
                         <i className="ph ph-trend-up text-amber-500 text-xl"></i>
-                        Evolución Anual Comparativa
+                        Evolución Anual Comparativa (Real)
                       </h3>
                     </div>
                     <div className="h-60 w-full relative">
@@ -931,7 +970,7 @@ export default function App() {
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white/40">
                       <h2 className="font-extrabold text-slate-800 flex items-center gap-2">
                         <i className="ph ph-users-four text-amber-500 text-xl"></i>
-                        Ranking de Operaciones
+                        Ranking de Operaciones (Año Actual)
                       </h2>
                     </div>
                     
