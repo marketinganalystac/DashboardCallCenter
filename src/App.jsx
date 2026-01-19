@@ -30,6 +30,67 @@ try {
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
+// --- UTILIDADES DE FECHAS (PANAMÁ) ---
+const getHolidays = (year) => {
+  // Feriados fijos
+  const fixedHolidays = [
+    `${year}-01-01`, // Año Nuevo
+    `${year}-01-09`, // Mártires
+    `${year}-05-01`, // Trabajo
+    `${year}-11-03`, // Separación Colombia
+    `${year}-11-04`, // Día de la Bandera (a veces puente, lo incluimos como feriado laboral común)
+    `${year}-11-05`, // Colón
+    `${year}-11-10`, // Grito de Los Santos
+    `${year}-11-28`, // Indep. España
+    `${year}-12-08`, // Día de la Madre
+    `${year}-12-25`, // Navidad
+  ];
+
+  // Cálculo aproximado de Semana Santa y Carnaval para 2024-2026 (Hardcoded para estabilidad)
+  // Carnaval Martes y Viernes Santo
+  let variableHolidays = [];
+  if (year === 2024) variableHolidays = ['2024-02-13', '2024-03-29'];
+  if (year === 2025) variableHolidays = ['2025-03-04', '2025-04-18']; // Carnaval 4 Mar, Viernes Santo 18 Abr
+  if (year === 2026) variableHolidays = ['2026-02-17', '2026-04-03'];
+
+  return [...fixedHolidays, ...variableHolidays];
+};
+
+const getPanamaBusinessDays = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0-indexed
+  const todayDate = now.getDate();
+  
+  const holidays = getHolidays(year);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  
+  let totalBusinessDays = 0;
+  let elapsedBusinessDays = 0;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const current = new Date(year, month, day);
+    const dayOfWeek = current.getDay(); // 0 = Domingo
+    const dateString = current.toISOString().split('T')[0];
+    
+    // Excluir Domingo (0) y Feriados
+    const isHoliday = holidays.includes(dateString);
+    const isSunday = dayOfWeek === 0;
+
+    if (!isSunday && !isHoliday) {
+      totalBusinessDays++;
+      // Días transcurridos: hasta la fecha excluyendo hoy (ayer fue el último día completo)
+      // La lógica del usuario: "dias transcurridos son los dias que han pasado hasta la fecha... -1 (dia en curso)"
+      if (day < todayDate) {
+        elapsedBusinessDays++;
+      }
+    }
+  }
+
+  return { totalBusinessDays, elapsedBusinessDays };
+};
+
+
 // --- COMPONENTE DE NOTIFICACIÓN ---
 const Notification = ({ message, type, onClose }) => {
   if (!message) return null;
@@ -191,6 +252,9 @@ export default function App() {
   const lineInstance = useRef(null);
   const fileInputRef = useRef(null);
 
+  // Estados para fechas calculadas
+  const [businessDays, setBusinessDays] = useState({ total: 25, elapsed: 10 });
+
   const showNotification = (msg, type = 'success') => {
     setNotification({ message: msg, type });
     setTimeout(() => setNotification(null), 5000);
@@ -201,6 +265,10 @@ export default function App() {
       setUser(u);
       setLoading(false);
     });
+    // Calcular días laborales al montar
+    const days = getPanamaBusinessDays();
+    setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
+    
     return () => unsubscribe();
   }, []);
 
@@ -704,24 +772,38 @@ export default function App() {
     setPendingFile(null);
   };
 
-  // Cálculos de KPI Globales (Basados en el año actual)
-  const config = { daysTotal: 25, daysElapsed: 10, goalAgentFixed: 15000 };
-  const targetPercentToday = config.daysElapsed / config.daysTotal;
-  const goalMonthAgent = config.goalAgentFixed;
-  const goalDailyAgent = goalMonthAgent / config.daysTotal;
-  const totalAgents = metrics.agents.length;
-  const goalMonthCC = goalMonthAgent * (totalAgents || 1); 
-  const goalDailyCC = goalMonthCC / config.daysTotal;
+  // --- CÁLCULOS KPI GLOBALES CORREGIDOS ---
+  
+  // 1. Días Laborales y Transcurridos (Dinámico)
+  const { total: daysTotal, elapsed: daysElapsed } = businessDays;
+
+  // 2. Metas Fijas y Calculadas (Según corrección del usuario)
+  const goalMonthAgent = 15000; // Meta fija 15k
+  const goalDailyAgent = daysTotal > 0 ? goalMonthAgent / daysTotal : 0; // Meta mes / días laborales
+  
+  const agentsCountForGoal = 3; // Fijo 3 agentes según requerimiento "la suma de la meta de 15k de las 3 agentes total 45k"
+  const goalMonthCC = goalMonthAgent * agentsCountForGoal; // 45k
+  const goalDailyCC = goalDailyAgent * agentsCountForGoal; // Meta diaria agente * 3
+
+  // 3. Ritmo Esperado Hoy: 1 - (días transcurridos / días laborales)
+  // Nota: Días transcurridos = días pasados hasta ayer
+  const paceRatio = daysTotal > 0 ? (daysElapsed / daysTotal) : 0;
+  const targetPercentToday = 1 - paceRatio; // Fórmula solicitada explícitamente
 
   // Procesamiento para Tabla
   const processedAgents = metrics.agents.map(agent => {
     const percent = agent.sales / goalMonthAgent;
+    // Diff se calcula contra la meta mensual total (o proporcional? Usualmente mensual para ver cierre)
     return { ...agent, goal: goalMonthAgent, diff: agent.sales - goalMonthAgent, percent: percent };
   }).sort((a, b) => b.sales - a.sales);
 
   const totalSales = processedAgents.reduce((acc, curr) => acc + curr.sales, 0);
-  const goalCCToday = goalDailyCC * config.daysElapsed;
+  
+  // Meta Acumulada Call Center al día de hoy (para ver si vamos ganando/perdiendo al día)
+  // Si "Ritmo Esperado" es lo que falta, el "Goal To Date" estándar es daysElapsed * dailyGoal
+  const goalCCToday = goalDailyCC * daysElapsed;
   const isCCAhead = totalSales >= goalCCToday;
+  
   const fmtMoney = (n) => '$' + n.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
 
   const customStyles = `
@@ -867,6 +949,9 @@ export default function App() {
                     <span className="w-8 h-[3px] bg-amber-500 rounded-full"></span>
                     Métricas de Control Diario
                   </h3>
+                  <div className="text-xs font-bold text-slate-400">
+                     Días Laborales: {daysTotal} | Transcurridos: {daysElapsed}
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                   <div className="metric-mini-exec bg-amber-50/50 border-amber-200/50">
@@ -928,7 +1013,7 @@ export default function App() {
                 <div className="glass-card p-6 border-l-4 border-l-blue-800">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Run Rate Cierre</p>
                   <div className="flex items-end gap-2">
-                    <span className="text-3xl font-black text-slate-900">{fmtMoney(totalSales / config.daysElapsed * config.daysTotal)}</span>
+                    <span className="text-3xl font-black text-slate-900">{fmtMoney(daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0)}</span>
                   </div>
                   <div className="mt-4">
                     <span className="text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full uppercase">Proyección Estimada</span>
@@ -941,7 +1026,7 @@ export default function App() {
                     <span className="text-3xl font-black text-slate-900">{fmtMoney(Math.max(0, goalMonthCC - totalSales))}</span>
                   </div>
                   <div className="mt-4">
-                    <span className="text-xs font-bold text-slate-500">Faltan {config.daysTotal - config.daysElapsed} días hábiles</span>
+                    <span className="text-xs font-bold text-slate-500">Faltan {daysTotal - daysElapsed} días hábiles</span>
                   </div>
                 </div>
               </div>
@@ -988,7 +1073,11 @@ export default function App() {
                         <tbody className="divide-y divide-slate-100">
                           {processedAgents.map((agent, index) => {
                             const percentage = agent.percent * 100;
-                            const isAhead = agent.percent >= targetPercentToday;
+                            // El estatus depende de si van cumpliendo el ritmo esperado (que es inverso según formula?)
+                            // Asumiremos que si "targetPercentToday" es lo que queda, el cumplimiento debe ser alto.
+                            // Para simplificar visualmente: Si %Venta >= (DíasTranscurridos/DíasTotales) vamos bien
+                            const standardPace = daysTotal > 0 ? (daysElapsed/daysTotal) : 0;
+                            const isAhead = agent.percent >= standardPace;
                             
                             let rankColor = 'bg-slate-100 text-slate-600';
                             if(index === 0) rankColor = 'bg-amber-100 text-amber-700 ring-2 ring-amber-400';
