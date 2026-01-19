@@ -47,7 +47,6 @@ const getHolidays = (year) => {
   ];
 
   // Cálculo aproximado de Semana Santa y Carnaval para 2024-2026 (Hardcoded para estabilidad)
-  // Carnaval Martes y Viernes Santo
   let variableHolidays = [];
   if (year === 2024) variableHolidays = ['2024-02-13', '2024-03-29'];
   if (year === 2025) variableHolidays = ['2025-03-04', '2025-04-18']; // Carnaval 4 Mar, Viernes Santo 18 Abr
@@ -80,7 +79,6 @@ const getPanamaBusinessDays = () => {
     if (!isSunday && !isHoliday) {
       totalBusinessDays++;
       // Días transcurridos: hasta la fecha excluyendo hoy (ayer fue el último día completo)
-      // La lógica del usuario: "dias transcurridos son los dias que han pasado hasta la fecha... -1 (dia en curso)"
       if (day < todayDate) {
         elapsedBusinessDays++;
       }
@@ -234,7 +232,7 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
 
 // --- COMPONENTE PRINCIPAL ---
 export default function App() {
-  const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [] });
+  const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [], categories: [] });
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
@@ -298,7 +296,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setMetrics({ agents: [], annual: [], daily: [] });
+      setMetrics({ agents: [], annual: [], daily: [], categories: [] });
     } catch (error) {
       console.error("Error signing out: ", error);
     }
@@ -317,10 +315,11 @@ export default function App() {
         setMetrics({
             agents: data.agents || [],
             annual: data.annual || [],
-            daily: data.daily || []
+            daily: data.daily || [],
+            categories: data.categories || []
         });
       } else {
-        setMetrics({ agents: [], annual: [], daily: [] });
+        setMetrics({ agents: [], annual: [], daily: [], categories: [] });
       }
       setDataLoading(false);
     }, (error) => {
@@ -627,7 +626,7 @@ export default function App() {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false, dateNF: 'yyyy-mm-dd'}); // raw: false para obtener fechas formateadas si es necesario
         
-        let colIndices = { name: -1, sales: -1, date: -1 }; 
+        let colIndices = { name: -1, sales: -1, date: -1, category: -1, quantity: -1 }; 
         const headers = jsonData[0]; 
         
         if (headers && Array.isArray(headers)) {
@@ -636,6 +635,9 @@ export default function App() {
             if (colIndices.name === -1 && (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente') || txt.includes('vendedor'))) colIndices.name = idx;
             if (colIndices.sales === -1 && (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales') || txt.includes('importe'))) colIndices.sales = idx;
             if (colIndices.date === -1 && (txt.includes('fecha') || txt.includes('date') || txt.includes('dia') || txt.includes('time'))) colIndices.date = idx;
+            // Detección de Categoría y Cantidad
+            if (colIndices.category === -1 && (txt.includes('categoria') || txt.includes('category') || txt.includes('producto') || txt.includes('l2'))) colIndices.category = idx;
+            if (colIndices.quantity === -1 && (txt.includes('cantidad') || txt.includes('quantity') || txt.includes('cant') || txt.includes('unidades'))) colIndices.quantity = idx;
           });
         }
 
@@ -646,6 +648,7 @@ export default function App() {
         const annualMap = new Map();
         const dailyMap = new Map();
         const agentsMap = new Map();
+        const categoryMap = new Map();
         
         let maxYear = 0;
 
@@ -691,10 +694,11 @@ export default function App() {
           // 1. Acumular Anual (Histórico completo)
           annualMap.set(year, (annualMap.get(year) || 0) + salesVal);
 
-          // 2. Acumular Diario y Agentes (Solo Año Actual / Más reciente)
+          // 2. Acumular Diario, Agentes y Categorías (Solo Año Actual / Más reciente)
           if (year === maxYear) {
               dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + salesVal);
 
+              // Agentes
               const rawName = String(row[colIndices.name]).trim();
               const nameKey = rawName.toLowerCase();
               if (agentsMap.has(nameKey)) {
@@ -704,12 +708,34 @@ export default function App() {
               } else {
                 agentsMap.set(nameKey, { name: rawName, sales: salesVal });
               }
+
+              // Categorías (Si existen columnas)
+              if (colIndices.category !== -1) {
+                  const rawCat = String(row[colIndices.category] || "Sin Categoría").trim();
+                  const rawQty = row[colIndices.quantity];
+                  let qtyVal = 0;
+                   if (typeof rawQty === 'number') {
+                     qtyVal = rawQty;
+                  } else if (typeof rawQty === 'string') {
+                     qtyVal = parseFloat(rawQty.replace(/[^0-9.-]+/g,"")) || 0;
+                  }
+
+                  if (categoryMap.has(rawCat)) {
+                      const existingCat = categoryMap.get(rawCat);
+                      existingCat.sales += salesVal;
+                      existingCat.quantity += qtyVal;
+                      categoryMap.set(rawCat, existingCat);
+                  } else {
+                      categoryMap.set(rawCat, { name: rawCat, sales: salesVal, quantity: qtyVal });
+                  }
+              }
           }
         }
 
         // Convertir Maps a Arrays
         const annualArray = Array.from(annualMap, ([year, total]) => ({ year, total }));
         const agentsArray = Array.from(agentsMap.values());
+        const categoriesArray = Array.from(categoryMap.values());
         
         // Rellenar huecos en días para el gráfico (si hay ventas el 1 y el 3, el 2 debe ser 0)
         let dailyArray = [];
@@ -732,7 +758,8 @@ export default function App() {
             const payload = {
                 agents: agentsArray,
                 annual: annualArray,
-                daily: dailyArray
+                daily: dailyArray,
+                categories: categoriesArray
             };
             const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
             await setDoc(dataRef, payload);
@@ -804,6 +831,14 @@ export default function App() {
   const goalCCToday = goalDailyCC * daysElapsed;
   const isCCAhead = totalSales >= goalCCToday;
   
+  // Procesamiento Categorías (Top y Bottom 3)
+  const sortedCategories = [...metrics.categories].sort((a, b) => b.sales - a.sales);
+  const top3Categories = sortedCategories.slice(0, 3);
+  const bottom3Categories = [...metrics.categories]
+    .filter(c => c.sales > 0) // Filtrar ceros si se desea ver ventas bajas reales
+    .sort((a, b) => a.sales - b.sales)
+    .slice(0, 3);
+
   const fmtMoney = (n) => '$' + n.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
 
   const customStyles = `
@@ -940,9 +975,9 @@ export default function App() {
              </div>
           ) : (
             <>
-              {/* CONTENIDO DASHBOARD (Solo si hay agentes) */}
+              {/* CONTENIDO DASHBOARD */}
               
-              {/* Panel de Parámetros */}
+              {/* 1. Panel de Parámetros */}
               <section className="glass-card p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -977,7 +1012,63 @@ export default function App() {
                 </div>
               </section>
 
-              {/* Nueva Sección: Análisis de Ventas Diarias */}
+              {/* 2. KPI Principal Grid + Market Share (Ahora en la misma fila) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                {/* KPI 1 */}
+                <div className={`glass-card p-6 border-l-4 ${isCCAhead ? 'border-l-amber-500' : 'border-l-rose-500'}`}>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Venta vs Cuota Hoy</p>
+                  <div className="flex items-end gap-2">
+                    <span className="text-3xl font-black text-slate-900">{fmtMoney(totalSales)}</span>
+                    <span className="text-xs font-bold text-slate-400 mb-1.5">/ {fmtMoney(goalCCToday)}</span>
+                  </div>
+                  <div className="mt-4 flex items-center gap-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isCCAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                      <i className={`ph-fill ${isCCAhead ? 'ph-trend-up' : 'ph-trend-down'}`}></i>
+                      {isCCAhead ? 'Sobre Cuota' : 'Bajo Cuota'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* KPI 2 */}
+                <div className="glass-card p-6 border-l-4 border-l-blue-800">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Run Rate Cierre</p>
+                  <div className="flex items-end gap-2">
+                    <span className="text-3xl font-black text-slate-900">{fmtMoney(daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0)}</span>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full uppercase">Proyección Estimada</span>
+                  </div>
+                </div>
+
+                {/* KPI 3 */}
+                <div className="glass-card p-6 border-l-4 border-l-slate-900">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Saldo Pendiente</p>
+                  <div className="flex items-end gap-2">
+                    <span className="text-3xl font-black text-slate-900">{fmtMoney(Math.max(0, goalMonthCC - totalSales))}</span>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-xs font-bold text-slate-500">Faltan {daysTotal - daysElapsed} días hábiles</span>
+                  </div>
+                </div>
+
+                {/* KPI 4 - Market Share (Movido Aquí) */}
+                <div className="glass-card p-4 flex flex-col items-center justify-between">
+                   <div className="w-full text-center mb-2">
+                      <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Market Share Interno</h3>
+                   </div>
+                   <div className="relative h-24 w-24">
+                      <canvas ref={pieChartRef}></canvas>
+                   </div>
+                   <div className="mt-2 text-center">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total Operado</p>
+                      <p className="text-lg font-black text-slate-800">${totalSales.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
+                   </div>
+                </div>
+
+              </div>
+
+              {/* 3. Ventas Día a Día (Movido Debajo de KPIs) */}
               <section className="glass-card p-6">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
@@ -994,154 +1085,154 @@ export default function App() {
                   </div>
               </section>
 
-              {/* KPI Principal Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className={`glass-card p-6 border-l-4 ${isCCAhead ? 'border-l-amber-500' : 'border-l-rose-500'}`}>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Venta vs Cuota Hoy</p>
-                  <div className="flex items-end gap-2">
-                    <span className="text-3xl font-black text-slate-900">{fmtMoney(totalSales)}</span>
-                    <span className="text-xs font-bold text-slate-400 mb-1.5">/ {fmtMoney(goalCCToday)}</span>
-                  </div>
-                  <div className="mt-4 flex items-center gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isCCAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
-                      <i className={`ph-fill ${isCCAhead ? 'ph-trend-up' : 'ph-trend-down'}`}></i>
-                      {isCCAhead ? 'Sobre Cuota' : 'Bajo Cuota'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="glass-card p-6 border-l-4 border-l-blue-800">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Run Rate Cierre</p>
-                  <div className="flex items-end gap-2">
-                    <span className="text-3xl font-black text-slate-900">{fmtMoney(daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0)}</span>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full uppercase">Proyección Estimada</span>
-                  </div>
-                </div>
-
-                <div className="glass-card p-6 border-l-4 border-l-slate-900">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Saldo Pendiente</p>
-                  <div className="flex items-end gap-2">
-                    <span className="text-3xl font-black text-slate-900">{fmtMoney(Math.max(0, goalMonthCC - totalSales))}</span>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-xs font-bold text-slate-500">Faltan {daysTotal - daysElapsed} días hábiles</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Secciones de Análisis */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* 4. Secciones de Análisis (Full Width) */}
+              <div className="space-y-8">
                 
-                {/* Columna Izquierda: Tabla y Comparativo */}
-                <div className="lg:col-span-2 space-y-6">
+                {/* Histórico Visual */}
+                <div className="glass-card p-8">
+                  <div className="flex items-center justify-between mb-8">
+                    <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
+                      <i className="ph ph-trend-up text-amber-500 text-xl"></i>
+                      Evolución Anual Comparativa (Real)
+                    </h3>
+                  </div>
+                  <div className="h-60 w-full relative">
+                    <canvas ref={barChartRef}></canvas>
+                  </div>
+                </div>
+
+                {/* Tabla Ejecutiva */}
+                <div className="glass-card overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white/40">
+                    <h2 className="font-extrabold text-slate-800 flex items-center gap-2">
+                      <i className="ph ph-users-four text-amber-500 text-xl"></i>
+                      Ranking de Operaciones (Año Actual)
+                    </h2>
+                  </div>
                   
-                  {/* Histórico Visual */}
-                  <div className="glass-card p-8">
-                    <div className="flex items-center justify-between mb-8">
-                      <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
-                        <i className="ph ph-trend-up text-amber-500 text-xl"></i>
-                        Evolución Anual Comparativa (Real)
-                      </h3>
-                    </div>
-                    <div className="h-60 w-full relative">
-                      <canvas ref={barChartRef}></canvas>
-                    </div>
-                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead>
+                        <tr className="text-[10px] text-slate-400 uppercase tracking-widest bg-slate-50/50">
+                          <th className="px-8 py-4 font-black">Asesor Comercial</th>
+                          <th className="px-6 py-4 font-black text-right">Venta Real</th>
+                          <th className="px-6 py-4 font-black text-right">Brecha Meta</th>
+                          <th className="px-6 py-4 font-black text-center">Cumplimiento</th>
+                          <th className="px-8 py-4 font-black text-center">Estatus</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {processedAgents.map((agent, index) => {
+                          const percentage = agent.percent * 100;
+                          const standardPace = daysTotal > 0 ? (daysElapsed/daysTotal) : 0;
+                          const isAhead = agent.percent >= standardPace;
+                          
+                          let rankColor = 'bg-slate-100 text-slate-600';
+                          if(index === 0) rankColor = 'bg-amber-100 text-amber-700 ring-2 ring-amber-400';
+                          if(index === 1) rankColor = 'bg-slate-200 text-slate-700';
+                          if(index === 2) rankColor = 'bg-orange-100 text-orange-800';
 
-                  {/* Tabla Ejecutiva */}
-                  <div className="glass-card overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white/40">
-                      <h2 className="font-extrabold text-slate-800 flex items-center gap-2">
-                        <i className="ph ph-users-four text-amber-500 text-xl"></i>
-                        Ranking de Operaciones (Año Actual)
-                      </h2>
-                    </div>
-                    
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm text-left">
-                        <thead>
-                          <tr className="text-[10px] text-slate-400 uppercase tracking-widest bg-slate-50/50">
-                            <th className="px-8 py-4 font-black">Asesor Comercial</th>
-                            <th className="px-6 py-4 font-black text-right">Venta Real</th>
-                            <th className="px-6 py-4 font-black text-right">Brecha Meta</th>
-                            <th className="px-6 py-4 font-black text-center">Cumplimiento</th>
-                            <th className="px-8 py-4 font-black text-center">Estatus</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {processedAgents.map((agent, index) => {
-                            const percentage = agent.percent * 100;
-                            // El estatus depende de si van cumpliendo el ritmo esperado (que es inverso según formula?)
-                            // Asumiremos que si "targetPercentToday" es lo que queda, el cumplimiento debe ser alto.
-                            // Para simplificar visualmente: Si %Venta >= (DíasTranscurridos/DíasTotales) vamos bien
-                            const standardPace = daysTotal > 0 ? (daysElapsed/daysTotal) : 0;
-                            const isAhead = agent.percent >= standardPace;
-                            
-                            let rankColor = 'bg-slate-100 text-slate-600';
-                            if(index === 0) rankColor = 'bg-amber-100 text-amber-700 ring-2 ring-amber-400';
-                            if(index === 1) rankColor = 'bg-slate-200 text-slate-700';
-                            if(index === 2) rankColor = 'bg-orange-100 text-orange-800';
-
-                            return (
-                              <tr key={index} className="group transition-all hover:bg-white/60">
-                                <td className="px-8 py-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className={`w-8 h-8 rounded-full ${rankColor} flex items-center justify-center text-xs font-bold transition-all`}>
-                                      {index + 1}
-                                    </div>
-                                    <span className="font-bold text-slate-700 tracking-tight">{agent.name}</span>
+                          return (
+                            <tr key={index} className="group transition-all hover:bg-white/60">
+                              <td className="px-8 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-8 h-8 rounded-full ${rankColor} flex items-center justify-center text-xs font-bold transition-all`}>
+                                    {index + 1}
                                   </div>
-                                </td>
-                                <td className="px-6 py-4 text-right font-bold text-slate-900">${agent.sales.toLocaleString('en-US')}</td>
-                                <td className={`px-6 py-4 text-right font-bold ${agent.diff >= 0 ? 'text-amber-600' : 'text-rose-500'}`}>
-                                  {agent.diff >= 0 ? '+' : ''}{Math.round(agent.diff).toLocaleString('en-US')}
-                                </td>
-                                <td className="px-6 py-4">
-                                  <div className="flex flex-col items-center gap-1.5">
-                                    <div className="w-32 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                                      <div className="bg-slate-900 h-1.5 rounded-full transition-all duration-1000" style={{width: `${Math.min(percentage, 100)}%`}}></div>
-                                    </div>
-                                    <span className="text-[10px] font-black text-slate-500">{percentage.toFixed(1)}%</span>
+                                  <span className="font-bold text-slate-700 tracking-tight">{agent.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-right font-bold text-slate-900">${agent.sales.toLocaleString('en-US')}</td>
+                              <td className={`px-6 py-4 text-right font-bold ${agent.diff >= 0 ? 'text-amber-600' : 'text-rose-500'}`}>
+                                {agent.diff >= 0 ? '+' : ''}{Math.round(agent.diff).toLocaleString('en-US')}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex flex-col items-center gap-1.5">
+                                  <div className="w-32 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                                    <div className="bg-slate-900 h-1.5 rounded-full transition-all duration-1000" style={{width: `${Math.min(percentage, 100)}%`}}></div>
                                   </div>
-                                </td>
-                                <td className="px-8 py-4 flex justify-center">
-                                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-50 text-rose-600'}`}>
-                                    <i className={`ph-fill ${isAhead ? 'ph-check-circle' : 'ph-warning-circle'}`}></i>
-                                    {isAhead ? 'Objetivo OK' : 'En Alerta'}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                                  <span className="text-[10px] font-black text-slate-500">{percentage.toFixed(1)}%</span>
+                                </div>
+                              </td>
+                              <td className="px-8 py-4 flex justify-center">
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-50 text-rose-600'}`}>
+                                  <i className={`ph-fill ${isAhead ? 'ph-check-circle' : 'ph-warning-circle'}`}></i>
+                                  {isAhead ? 'Objetivo OK' : 'En Alerta'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
-                {/* Columna Derecha: Gráfico de Pastel y Rankings */}
-                <div className="space-y-6">
-                  {/* Market Share */}
-                  <div className="glass-card p-8 flex flex-col items-center">
-                    <div className="w-full mb-6">
-                      <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
-                        <i className="ph ph-chart-pie-slice text-amber-500 text-xl"></i>
-                        Market Share Interno
-                      </h3>
+                {/* 5. NUEVO: Análisis de Categorías (Top 3 Mas / Menos Vendida) */}
+                {top3Categories.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Top 3 Más Vendida */}
+                    <div className="glass-card overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 bg-emerald-50/50">
+                             <h3 className="font-bold text-emerald-800 flex items-center gap-2">
+                                <i className="ph-fill ph-trophy text-emerald-600"></i>
+                                Top 3 Categorías Más Vendidas
+                             </h3>
+                        </div>
+                        <div className="p-0">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left">Categoría</th>
+                                        <th className="px-4 py-2 text-right">Cant.</th>
+                                        <th className="px-4 py-2 text-right">Ventas</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {top3Categories.map((cat, idx) => (
+                                        <tr key={idx} className="hover:bg-emerald-50/30 transition-colors">
+                                            <td className="px-4 py-3 font-bold text-slate-700">{cat.name}</td>
+                                            <td className="px-4 py-3 text-right text-slate-600">{cat.quantity.toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-right font-bold text-emerald-700">${cat.sales.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    
-                    <div className="relative w-full aspect-square max-w-[260px]">
-                      <canvas ref={pieChartRef}></canvas>
+
+                    {/* Top 3 Menos Vendida */}
+                    <div className="glass-card overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 bg-rose-50/50">
+                             <h3 className="font-bold text-rose-800 flex items-center gap-2">
+                                <i className="ph-fill ph-trend-down text-rose-600"></i>
+                                Top 3 Categorías Menos Vendidas
+                             </h3>
+                        </div>
+                        <div className="p-0">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left">Categoría</th>
+                                        <th className="px-4 py-2 text-right">Cant.</th>
+                                        <th className="px-4 py-2 text-right">Ventas</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {bottom3Categories.map((cat, idx) => (
+                                        <tr key={idx} className="hover:bg-rose-50/30 transition-colors">
+                                            <td className="px-4 py-3 font-bold text-slate-700">{cat.name}</td>
+                                            <td className="px-4 py-3 text-right text-slate-600">{cat.quantity.toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-right font-bold text-rose-700">${cat.sales.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    
-                    <div className="mt-8 w-full p-6 rounded-2xl bg-slate-900 text-center text-white shadow-xl shadow-slate-900/30 ring-1 ring-white/10">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Volumen Total Operado</p>
-                      <p className="text-4xl font-black text-white">${totalSales.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
-                    </div>
-                  </div>
                 </div>
+                )}
+
               </div>
             </>
           )}
