@@ -21,7 +21,6 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// Intentamos cargar analytics solo si es compatible con el entorno
 let analytics;
 try {
   analytics = getAnalytics(app);
@@ -30,6 +29,44 @@ try {
 }
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// --- COMPONENTE DE NOTIFICACIÓN ---
+const Notification = ({ message, type, onClose }) => {
+  if (!message) return null;
+  const isError = type === 'error';
+  return (
+    <div className={`fixed top-6 right-6 z-50 p-4 rounded-xl shadow-2xl border flex items-center gap-3 animate-fade-in-down transition-all transform ${isError ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+      <i className={`ph-fill text-xl ${isError ? 'ph-warning-circle' : 'ph-check-circle'}`}></i>
+      <span className="font-bold text-sm">{message}</span>
+      <button onClick={onClose} className="ml-2 opacity-50 hover:opacity-100"><i className="ph-bold ph-x"></i></button>
+    </div>
+  );
+};
+
+// --- COMPONENTE DE MODAL DE CONFIRMACIÓN ---
+const ConfirmModal = ({ isOpen, onCancel, onConfirm, title, message }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onCancel}></div>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-100 animate-scale-in">
+        <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-4 text-2xl">
+          <i className="ph-fill ph-warning"></i>
+        </div>
+        <h3 className="text-xl font-bold text-slate-900 mb-2">{title}</h3>
+        <p className="text-slate-600 text-sm mb-6 leading-relaxed">{message}</p>
+        <div className="flex gap-3 justify-end">
+          <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold rounded-lg text-sm transition-colors">
+            Cancelar
+          </button>
+          <button onClick={onConfirm} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm shadow-lg shadow-amber-500/20 transition-all">
+            Sí, reemplazar datos
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- COMPONENTE DE LOGIN ---
 const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
@@ -53,7 +90,6 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Decorativo */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-900 to-slate-800 z-0"></div>
       <div className="absolute top-[-10%] right-[-5%] w-96 h-96 bg-amber-500/20 rounded-full blur-3xl animate-pulse"></div>
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl"></div>
@@ -140,12 +176,24 @@ export default function App() {
   const [agents, setAgents] = useState([]); 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true); // Carga inicial de auth
-  const [dataLoading, setDataLoading] = useState(false); // Carga de datos
+  const [dataLoading, setDataLoading] = useState(false); // Carga de datos de Firestore
+  
+  // Nuevos estados para UI de carga y confirmación
+  const [isUploading, setIsUploading] = useState(false); // Subida de archivo
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [notification, setNotification] = useState(null);
 
   const pieChartRef = useRef(null);
   const barChartRef = useRef(null);
   const pieInstance = useRef(null);
   const barInstance = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const showNotification = (msg, type = 'success') => {
+    setNotification({ message: msg, type });
+    setTimeout(() => setNotification(null), 5000);
+  };
 
   // 1. Monitor de Estado de Autenticación
   useEffect(() => {
@@ -167,7 +215,7 @@ export default function App() {
       }
     } catch (error) {
       console.error("Auth error:", error);
-      alert("Error al iniciar como invitado: " + error.message);
+      showNotification("Error al iniciar como invitado: " + error.message, 'error');
       setLoading(false);
     }
   };
@@ -183,7 +231,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setAgents([]); // Limpiar datos al salir
+      setAgents([]);
     } catch (error) {
       console.error("Error signing out: ", error);
     }
@@ -194,7 +242,6 @@ export default function App() {
     if (!user) return;
     
     setDataLoading(true);
-    // Ruta estricta para guardar/leer datos: /artifacts/{appId}/public/data/{collectionName}
     const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
 
     const unsubscribe = onSnapshot(dataRef, (docSnap) => {
@@ -217,7 +264,6 @@ export default function App() {
 
   // 4. Cargar Scripts Externos
   useEffect(() => {
-    // Inject Tailwind Config
     const tailwindConfigScript = document.createElement('script');
     tailwindConfigScript.text = `
       tailwind.config = {
@@ -226,6 +272,16 @@ export default function App() {
             colors: {
               navy: { 800: '#1e3a8a', 900: '#0f172a' },
               amber: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out',
+              'fade-in-down': 'fadeInDown 0.5s ease-out',
+              'scale-in': 'scaleIn 0.3s ease-out',
+            },
+            keyframes: {
+              fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+              fadeInDown: { '0%': { opacity: '0', transform: 'translateY(-10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+              scaleIn: { '0%': { opacity: '0', transform: 'scale(0.95)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
             }
           }
         }
@@ -355,56 +411,111 @@ export default function App() {
     }
   };
 
-  // Manejo de Archivo Excel
-  const handleFileUpload = (e) => {
+  // --- LÓGICA DE PROCESAMIENTO DE ARCHIVO ---
+  
+  // 1. Selector de archivo (Handler inicial)
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (!file || typeof XLSX === 'undefined') return;
+    if (!file) return;
+
+    // Si ya hay agentes, pedir confirmación
+    if (agents.length > 0) {
+      setPendingFile(file);
+      setShowConfirmModal(true);
+      // Limpiamos el input para permitir seleccionar el mismo archivo si se cancela y reintenta
+      e.target.value = ''; 
+    } else {
+      processFile(file);
+      e.target.value = ''; 
+    }
+  };
+
+  // 2. Procesar el archivo (Lectura y Guardado)
+  const processFile = (file) => {
+    if (typeof XLSX === 'undefined') {
+        showNotification("La librería Excel no se ha cargado aún. Intenta de nuevo.", 'error');
+        return;
+    }
+
+    setIsUploading(true); // Activar overlay de carga
 
     const reader = new FileReader();
     reader.onload = async function(e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, {type: 'array'});
-      const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
-      
-      let colIndices = { name: 0, sales: 1 }; 
-      const headers = jsonData[0]; 
-      
-      if (headers && Array.isArray(headers)) {
-        headers.forEach((h, idx) => {
-          const txt = String(h).toLowerCase();
-          if (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente') || txt.includes('vendedor')) colIndices.name = idx;
-          if (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales') || txt.includes('importe')) colIndices.sales = idx;
-        });
-      }
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
+        const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
+        
+        let colIndices = { name: 0, sales: 1 }; 
+        const headers = jsonData[0]; 
+        
+        if (headers && Array.isArray(headers)) {
+          headers.forEach((h, idx) => {
+            const txt = String(h).toLowerCase();
+            if (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente') || txt.includes('vendedor')) colIndices.name = idx;
+            if (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales') || txt.includes('importe')) colIndices.sales = idx;
+          });
+        }
 
-      const newAgents = [];
-      for(let i = 1; i < jsonData.length; i++) {
-        const row = jsonData[i];
-        if (!row || !row[colIndices.name]) continue;
-        newAgents.push({
-          name: String(row[colIndices.name]).trim(),
-          sales: parseFloat(String(row[colIndices.sales]).replace(/[^0-9.-]+/g,"")) || 0
-        });
-      }
+        const newAgents = [];
+        for(let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row || !row[colIndices.name]) continue;
+          
+          const rawSales = row[colIndices.sales];
+          // Limpieza robusta de valores numéricos
+          let salesVal = 0;
+          if (typeof rawSales === 'number') {
+             salesVal = rawSales;
+          } else if (typeof rawSales === 'string') {
+             salesVal = parseFloat(rawSales.replace(/[^0-9.-]+/g,"")) || 0;
+          }
 
-      if(newAgents.length > 0) {
-        if (user) {
-          try {
+          newAgents.push({
+            name: String(row[colIndices.name]).trim(),
+            sales: salesVal
+          });
+        }
+
+        if(newAgents.length > 0) {
+          if (user) {
             const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
             await setDoc(dataRef, { agents: newAgents });
-            alert("✅ Datos importados y guardados en la nube correctamente.");
-          } catch (err) {
-            console.error(err);
-            alert("❌ Error al guardar en la nube: " + err.message);
+            showNotification("✅ Datos actualizados correctamente.");
+          } else {
+            showNotification("⚠️ No hay sesión activa. Recarga la página.", 'error');
           }
         } else {
-            alert("⏳ Esperando conexión con la base de datos...");
+          showNotification("⚠️ El archivo no contiene datos válidos. Revisa las columnas.", 'error');
         }
-      } else {
-        alert("⚠️ No se encontraron datos válidos. Verifique las columnas 'Asesor' y 'Venta'.");
+      } catch (err) {
+        console.error(err);
+        showNotification("❌ Error al procesar el archivo: " + err.message, 'error');
+      } finally {
+        setIsUploading(false); // Desactivar overlay de carga
+        setPendingFile(null);
       }
     };
+    
+    reader.onerror = () => {
+        showNotification("Error de lectura de archivo", 'error');
+        setIsUploading(false);
+    };
+    
     reader.readAsArrayBuffer(file);
+  };
+
+  // 3. Handlers de Modal
+  const confirmReplace = () => {
+    setShowConfirmModal(false);
+    if (pendingFile) {
+      processFile(pendingFile);
+    }
+  };
+
+  const cancelReplace = () => {
+    setShowConfirmModal(false);
+    setPendingFile(null);
   };
 
   // Cálculos
@@ -461,6 +572,7 @@ export default function App() {
         <>
             <style>{customStyles}</style>
             <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+            <Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} />
             <LoginScreen onLoginGuest={handleLoginGuest} onLoginEmail={handleLoginEmail} />
         </>
     );
@@ -471,6 +583,32 @@ export default function App() {
       <style>{customStyles}</style>
       <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
       
+      {/* Overlay de Carga (Global) */}
+      {isUploading && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center">
+           <div className="relative">
+             <div className="w-16 h-16 border-4 border-slate-700 border-t-amber-500 rounded-full animate-spin"></div>
+             <div className="absolute inset-0 flex items-center justify-center">
+               <i className="ph-fill ph-file-arrow-up text-white text-xl"></i>
+             </div>
+           </div>
+           <h3 className="text-white font-bold mt-6 text-lg animate-pulse">Procesando Datos...</h3>
+           <p className="text-slate-400 text-sm mt-2">Estamos construyendo tu dashboard</p>
+        </div>
+      )}
+
+      {/* Modal de Confirmación */}
+      <ConfirmModal 
+        isOpen={showConfirmModal}
+        title="Reemplazar Datos Existentes"
+        message="Ya hay información cargada en el sistema. ¿Estás seguro de que deseas reemplazar los datos actuales con el nuevo archivo? Esta acción no se puede deshacer."
+        onCancel={cancelReplace}
+        onConfirm={confirmReplace}
+      />
+
+      {/* Notificaciones */}
+      <Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} />
+
       <div className="p-4 lg:p-8 animate-fade-in">
         <div className="max-w-7xl mx-auto space-y-6">
           
@@ -490,7 +628,13 @@ export default function App() {
               <label className="group cursor-pointer px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-slate-900/30">
                 <i className="ph ph-file-xls font-bold text-amber-500"></i>
                 <span>Importar Datos</span>
-                <input type="file" onChange={handleFileUpload} accept=".xlsx, .xls, .csv" className="hidden" />
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  onChange={handleFileSelect} 
+                  accept=".xlsx, .xls, .csv" 
+                  className="hidden" 
+                />
               </label>
               
               <button 
@@ -511,13 +655,19 @@ export default function App() {
                 </div>
                 <h2 className="text-2xl font-bold text-slate-700">Comencemos</h2>
                 <p className="text-slate-500 max-w-md">
-                    {dataLoading ? "Cargando datos de la nube..." : "No hay datos cargados en el sistema. Sube tu archivo Excel para visualizar las métricas."}
+                    {dataLoading ? "Sincronizando datos de la nube..." : "No hay datos cargados en el sistema. Sube tu archivo Excel para visualizar las métricas."}
                 </p>
                 {!dataLoading && (
                     <label className="cursor-pointer px-8 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-500/30 transition-all flex items-center gap-2">
                         <i className="ph-bold ph-upload-simple"></i>
                         Subir Archivo Excel
-                        <input type="file" onChange={handleFileUpload} accept=".xlsx, .xls, .csv" className="hidden" />
+                        <input 
+                            type="file" 
+                            ref={fileInputRef}
+                            onChange={handleFileSelect} 
+                            accept=".xlsx, .xls, .csv" 
+                            className="hidden" 
+                        />
                     </label>
                 )}
              </div>
