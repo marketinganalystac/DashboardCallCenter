@@ -230,6 +230,45 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
   );
 };
 
+// --- COMPONENTE CIRCULAR PROGRESS ---
+const CircularProgress = ({ value, max, color = "text-amber-500", size = 60, strokeWidth = 5 }) => {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+    const progress = Math.min(Math.max(value / max, 0), 1);
+    const dashoffset = circumference - progress * circumference;
+
+    return (
+        <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+            <svg width={size} height={size} className="transform -rotate-90">
+                <circle
+                    className="text-slate-200"
+                    strokeWidth={strokeWidth}
+                    stroke="currentColor"
+                    fill="transparent"
+                    r={radius}
+                    cx={size / 2}
+                    cy={size / 2}
+                />
+                <circle
+                    className={`${color} transition-all duration-1000 ease-out`}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={dashoffset}
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="transparent"
+                    r={radius}
+                    cx={size / 2}
+                    cy={size / 2}
+                />
+            </svg>
+            <div className="absolute text-xs font-bold text-slate-700">
+                {Math.round(progress * 100)}%
+            </div>
+        </div>
+    );
+};
+
 // --- COMPONENTE PRINCIPAL ---
 export default function App() {
   const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [], categories: [] });
@@ -393,7 +432,7 @@ export default function App() {
 
     const processedAgents = [...metrics.agents].sort((a, b) => b.sales - a.sales);
     
-    // --- PIE CHART (Agentes Top) ---
+    // --- PIE CHART (Agentes Top) - MAS DINAMICO ---
     if (pieChartRef.current) {
       if (pieInstance.current) pieInstance.current.destroy();
       const ctxPie = pieChartRef.current.getContext('2d');
@@ -404,15 +443,37 @@ export default function App() {
           datasets: [{
             data: processedAgents.map(a => a.sales),
             backgroundColor: ['#0f172a', '#f59e0b', '#334155', '#fbbf24', '#94a3b8'],
-            borderWidth: 0,
-            hoverOffset: 10
+            borderWidth: 2,
+            borderColor: '#ffffff',
+            hoverOffset: 20, // Más desplazamiento al hover
+            borderRadius: 5, // Bordes redondeados en los segmentos
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          cutout: '65%',
-          plugins: { legend: { display: false } }
+          cutout: '75%', // Más fino para look moderno
+          animation: {
+            animateScale: true,
+            animateRotate: true
+          },
+          plugins: { 
+              legend: { display: false },
+              tooltip: {
+                  backgroundColor: '#0f172a',
+                  padding: 12,
+                  cornerRadius: 8,
+                  callbacks: {
+                      label: function(context) {
+                          const label = context.label || '';
+                          const value = context.raw || 0;
+                          const total = context.chart._metasets[context.datasetIndex].total;
+                          const percentage = ((value / total) * 100).toFixed(1) + '%';
+                          return `${label}: ${percentage}`;
+                      }
+                  }
+              }
+          }
         }
       });
     }
@@ -421,9 +482,7 @@ export default function App() {
     if (barChartRef.current) {
       if (barInstance.current) barInstance.current.destroy();
       
-      // Ordenar años cronológicamente
       const sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
-      // Tomamos los últimos 3 años disponibles (o todos si son menos de 3)
       const displayYears = sortedYears.slice(-3);
 
       const growthLabelPlugin = {
@@ -462,7 +521,6 @@ export default function App() {
             label: 'Ventas Totales',
             data: displayYears.map(y => y.total),
             backgroundColor: (ctx) => {
-                // Color diferente para el último año (año actual)
                 const index = ctx.dataIndex;
                 const isLast = index === displayYears.length - 1;
                 return isLast ? '#f59e0b' : '#0f172a';
@@ -492,10 +550,9 @@ export default function App() {
     if (lineChartRef.current) {
         if (lineInstance.current) lineInstance.current.destroy();
         
-        // Datos diarios reales
-        const dailyDataPoints = metrics.daily; // Ya vienen ordenados y filtrados por el año actual desde processFile
+        const dailyDataPoints = metrics.daily; 
         const labels = dailyDataPoints.map(d => {
-            const date = new Date(d.date); // 'YYYY-MM-DD'
+            const date = new Date(d.date); 
             return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
         });
         const dataValues = dailyDataPoints.map(d => d.total);
@@ -539,7 +596,7 @@ export default function App() {
                         return gradient;
                     },
                     borderWidth: 2,
-                    pointRadius: 2, // Mostrar puntos pequeños siempre
+                    pointRadius: 2,
                     pointHoverRadius: 6,
                     pointBackgroundColor: '#fff',
                     pointBorderColor: '#f59e0b',
@@ -564,7 +621,7 @@ export default function App() {
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { display: false } // Ocultar etiquetas X para limpieza visual
+                        ticks: { display: false } 
                     }
                 },
                 plugins: {
@@ -586,7 +643,16 @@ export default function App() {
                                     label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
                                 }
                                 return label;
-                            }
+                            },
+                             // Opcional: Mostrar mejor vendedor en tooltip si se desea
+                             // afterBody: (tooltipItems) => {
+                             //    const index = tooltipItems[0].dataIndex;
+                             //    const dayData = metrics.daily[index];
+                             //    if (dayData && dayData.bestAgent) {
+                             //        return `🏆 ${dayData.bestAgent.name}: $${dayData.bestAgent.sales.toLocaleString()}`;
+                             //    }
+                             //    return '';
+                             // }
                         }
                     }
                 }
@@ -622,9 +688,9 @@ export default function App() {
     reader.onload = async function(e) {
       try {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array', cellDates: true}); // cellDates true para parsear fechas
+        const workbook = XLSX.read(data, {type: 'array', cellDates: true});
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false, dateNF: 'yyyy-mm-dd'}); // raw: false para obtener fechas formateadas si es necesario
+        const jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false, dateNF: 'yyyy-mm-dd'});
         
         let colIndices = { name: -1, sales: -1, date: -1, category: -1, quantity: -1 }; 
         const headers = jsonData[0]; 
@@ -635,7 +701,6 @@ export default function App() {
             if (colIndices.name === -1 && (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente') || txt.includes('vendedor'))) colIndices.name = idx;
             if (colIndices.sales === -1 && (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales') || txt.includes('importe'))) colIndices.sales = idx;
             if (colIndices.date === -1 && (txt.includes('fecha') || txt.includes('date') || txt.includes('dia') || txt.includes('time'))) colIndices.date = idx;
-            // Detección de Categoría y Cantidad
             if (colIndices.category === -1 && (txt.includes('categoria') || txt.includes('category') || txt.includes('producto') || txt.includes('l2'))) colIndices.category = idx;
             if (colIndices.quantity === -1 && (txt.includes('cantidad') || txt.includes('quantity') || txt.includes('cant') || txt.includes('unidades'))) colIndices.quantity = idx;
           });
@@ -649,10 +714,10 @@ export default function App() {
         const dailyMap = new Map();
         const agentsMap = new Map();
         const categoryMap = new Map();
+        const dailyAgentSalesMap = new Map(); // Para rastrear mejor vendedor por día
         
         let maxYear = 0;
 
-        // Primera pasada para encontrar el año más reciente (Current Year)
         for(let i = 1; i < jsonData.length; i++) {
              const row = jsonData[i];
              if (!row) continue;
@@ -665,13 +730,12 @@ export default function App() {
              }
         }
         
-        if (maxYear === 0) maxYear = new Date().getFullYear(); // Fallback
+        if (maxYear === 0) maxYear = new Date().getFullYear();
 
         for(let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i];
           if (!row || !row[colIndices.name]) continue;
           
-          // Procesar Venta
           const rawSales = row[colIndices.sales];
           let salesVal = 0;
           if (typeof rawSales === 'number') {
@@ -680,7 +744,6 @@ export default function App() {
              salesVal = parseFloat(rawSales.replace(/[^0-9.-]+/g,"")) || 0;
           }
 
-          // Procesar Fecha
           const rawDate = row[colIndices.date];
           let dateObj = null;
           if (rawDate instanceof Date) dateObj = rawDate;
@@ -689,16 +752,13 @@ export default function App() {
           if (!dateObj || isNaN(dateObj.getTime())) continue;
 
           const year = dateObj.getFullYear();
-          const dateStr = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD
+          const dateStr = dateObj.toISOString().split('T')[0]; 
 
-          // 1. Acumular Anual (Histórico completo)
           annualMap.set(year, (annualMap.get(year) || 0) + salesVal);
 
-          // 2. Acumular Diario, Agentes y Categorías (Solo Año Actual / Más reciente)
           if (year === maxYear) {
               dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + salesVal);
 
-              // Agentes
               const rawName = String(row[colIndices.name]).trim();
               const nameKey = rawName.toLowerCase();
               if (agentsMap.has(nameKey)) {
@@ -709,7 +769,11 @@ export default function App() {
                 agentsMap.set(nameKey, { name: rawName, sales: salesVal });
               }
 
-              // Categorías (Si existen columnas)
+              // Rastrear ventas por agente por día
+              if (!dailyAgentSalesMap.has(dateStr)) dailyAgentSalesMap.set(dateStr, new Map());
+              const dayAgentMap = dailyAgentSalesMap.get(dateStr);
+              dayAgentMap.set(nameKey, (dayAgentMap.get(nameKey) || 0) + salesVal);
+
               if (colIndices.category !== -1) {
                   const rawCat = String(row[colIndices.category] || "Sin Categoría").trim();
                   const rawQty = row[colIndices.quantity];
@@ -732,12 +796,10 @@ export default function App() {
           }
         }
 
-        // Convertir Maps a Arrays
         const annualArray = Array.from(annualMap, ([year, total]) => ({ year, total }));
         const agentsArray = Array.from(agentsMap.values());
         const categoriesArray = Array.from(categoryMap.values());
         
-        // Rellenar huecos en días para el gráfico (si hay ventas el 1 y el 3, el 2 debe ser 0)
         let dailyArray = [];
         if (dailyMap.size > 0) {
             const sortedDates = Array.from(dailyMap.keys()).sort();
@@ -746,9 +808,26 @@ export default function App() {
             
             for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
                 const dStr = d.toISOString().split('T')[0];
+                
+                // Encontrar mejor vendedor del día
+                let bestAgentInfo = { name: '-', sales: 0 };
+                if (dailyAgentSalesMap.has(dStr)) {
+                    const dayAgentMap = dailyAgentSalesMap.get(dStr);
+                    let maxSales = -1;
+                    for (const [agentKey, val] of dayAgentMap.entries()) {
+                        if (val > maxSales) {
+                            maxSales = val;
+                            // Usar nombre bonito del mapa global de agentes
+                            const prettyName = agentsMap.get(agentKey)?.name || agentKey;
+                            bestAgentInfo = { name: prettyName, sales: val };
+                        }
+                    }
+                }
+
                 dailyArray.push({
                     date: dStr,
-                    total: dailyMap.get(dStr) || 0
+                    total: dailyMap.get(dStr) || 0,
+                    bestAgent: bestAgentInfo
                 });
             }
         }
@@ -799,45 +878,54 @@ export default function App() {
     setPendingFile(null);
   };
 
-  // --- CÁLCULOS KPI GLOBALES CORREGIDOS ---
-  
-  // 1. Días Laborales y Transcurridos (Dinámico)
+  // --- CÁLCULOS KPI GLOBALES ---
   const { total: daysTotal, elapsed: daysElapsed } = businessDays;
+  const goalMonthAgent = 15000;
+  const goalDailyAgent = daysTotal > 0 ? goalMonthAgent / daysTotal : 0;
+  const agentsCountForGoal = 3; 
+  const goalMonthCC = goalMonthAgent * agentsCountForGoal; 
+  const goalDailyCC = goalDailyAgent * agentsCountForGoal; 
 
-  // 2. Metas Fijas y Calculadas (Según corrección del usuario)
-  const goalMonthAgent = 15000; // Meta fija 15k
-  const goalDailyAgent = daysTotal > 0 ? goalMonthAgent / daysTotal : 0; // Meta mes / días laborales
-  
-  const agentsCountForGoal = 3; // Fijo 3 agentes según requerimiento "la suma de la meta de 15k de las 3 agentes total 45k"
-  const goalMonthCC = goalMonthAgent * agentsCountForGoal; // 45k
-  const goalDailyCC = goalDailyAgent * agentsCountForGoal; // Meta diaria agente * 3
-
-  // 3. Ritmo Esperado Hoy: 1 - (días transcurridos / días laborales)
-  // Nota: Días transcurridos = días pasados hasta ayer
   const paceRatio = daysTotal > 0 ? (daysElapsed / daysTotal) : 0;
-  const targetPercentToday = 1 - paceRatio; // Fórmula solicitada explícitamente
+  const targetPercentToday = 1 - paceRatio; 
 
-  // Procesamiento para Tabla
   const processedAgents = metrics.agents.map(agent => {
     const percent = agent.sales / goalMonthAgent;
-    // Diff se calcula contra la meta mensual total (o proporcional? Usualmente mensual para ver cierre)
     return { ...agent, goal: goalMonthAgent, diff: agent.sales - goalMonthAgent, percent: percent };
   }).sort((a, b) => b.sales - a.sales);
 
   const totalSales = processedAgents.reduce((acc, curr) => acc + curr.sales, 0);
-  
-  // Meta Acumulada Call Center al día de hoy (para ver si vamos ganando/perdiendo al día)
-  // Si "Ritmo Esperado" es lo que falta, el "Goal To Date" estándar es daysElapsed * dailyGoal
   const goalCCToday = goalDailyCC * daysElapsed;
   const isCCAhead = totalSales >= goalCCToday;
   
-  // Procesamiento Categorías (Top y Bottom 3)
   const sortedCategories = [...metrics.categories].sort((a, b) => b.sales - a.sales);
   const top3Categories = sortedCategories.slice(0, 3);
   const bottom3Categories = [...metrics.categories]
-    .filter(c => c.sales > 0) // Filtrar ceros si se desea ver ventas bajas reales
+    .filter(c => c.sales > 0) 
     .sort((a, b) => a.sales - b.sales)
     .slice(0, 3);
+
+  // Cálculos para Ventas Día a Día Header
+  let lastDaySales = 0;
+  let prevDaySales = 0;
+  let growthPct = 0;
+  let bestAgentToday = { name: 'N/A', sales: 0 };
+  
+  if (metrics.daily.length > 0) {
+      const nonEmptyDays = metrics.daily.filter(d => d.total > 0); // Considerar último día con venta real
+      if (nonEmptyDays.length > 0) {
+          const lastDayData = nonEmptyDays[nonEmptyDays.length - 1];
+          lastDaySales = lastDayData.total;
+          bestAgentToday = lastDayData.bestAgent || { name: 'N/A', sales: 0 };
+          
+          if (nonEmptyDays.length > 1) {
+              prevDaySales = nonEmptyDays[nonEmptyDays.length - 2].total;
+              if (prevDaySales > 0) {
+                  growthPct = ((lastDaySales - prevDaySales) / prevDaySales) * 100;
+              }
+          }
+      }
+  }
 
   const fmtMoney = (n) => '$' + n.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
 
@@ -975,14 +1063,70 @@ export default function App() {
              </div>
           ) : (
             <>
-              {/* CONTENIDO DASHBOARD - LAYOUT REESTRUCTURADO */}
+              {/* CONTENIDO DASHBOARD - REORDENADO SEGUN INSTRUCCIONES */}
               
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 
                 {/* COLUMNA IZQUIERDA (3 SPAN): Métricas y KPIs */}
                 <div className="lg:col-span-3 flex flex-col gap-6">
                     
-                    {/* 1. Panel de Parámetros */}
+                    {/* 1. KPI Principales Grid (MOVIDO ARRIBA Y HECHO MAS GRAFICO) */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* KPI 1 - Gráfico: Circular Progress */}
+                        <div className={`glass-card p-5 border-l-4 ${isCCAhead ? 'border-l-amber-500' : 'border-l-rose-500'} flex items-center gap-4`}>
+                            <CircularProgress 
+                                value={totalSales} 
+                                max={goalCCToday} 
+                                color={isCCAhead ? 'text-amber-500' : 'text-rose-500'} 
+                                size={70} 
+                            />
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Venta vs Cuota Hoy</p>
+                                <div className="flex flex-col">
+                                    <span className="text-2xl font-black text-slate-900">{fmtMoney(totalSales)}</span>
+                                    <span className="text-[10px] font-bold text-slate-400">Meta: {fmtMoney(goalCCToday)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* KPI 2 - Gráfico: Barra de Proyección */}
+                        <div className="glass-card p-5 border-l-4 border-l-blue-800 flex flex-col justify-center">
+                            <div className="flex justify-between items-center mb-2">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Run Rate Cierre</p>
+                                <i className="ph-fill ph-chart-line-up text-blue-800"></i>
+                            </div>
+                            <span className="text-2xl font-black text-slate-900 mb-2">{fmtMoney(daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0)}</span>
+                            
+                            {/* Barra Visual */}
+                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden flex">
+                                <div className="bg-blue-800 h-full rounded-full" style={{width: '70%'}}></div>
+                                <div className="bg-blue-300 h-full" style={{width: '30%'}}></div>
+                            </div>
+                            <div className="flex justify-between mt-1 text-[9px] font-bold text-slate-400 uppercase">
+                                <span>Real</span>
+                                <span>Proyección</span>
+                            </div>
+                        </div>
+
+                        {/* KPI 3 - Gráfico: Barra de Falta */}
+                        <div className="glass-card p-5 border-l-4 border-l-slate-900 flex flex-col justify-center">
+                             <div className="flex justify-between items-center mb-2">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Pendiente</p>
+                                <i className="ph-fill ph-hourglass-high text-slate-900"></i>
+                            </div>
+                            <span className="text-2xl font-black text-slate-900 mb-2">{fmtMoney(Math.max(0, goalMonthCC - totalSales))}</span>
+                            
+                            {/* Barra Inversa */}
+                            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                <div className="bg-slate-900 h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (Math.max(0, goalMonthCC - totalSales) / goalMonthCC) * 100)}%` }}></div>
+                            </div>
+                             <div className="mt-1 text-[10px] font-bold text-slate-500 text-right">
+                                Restan {daysTotal - daysElapsed} días hábiles
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 2. Panel de Parámetros (MOVIDO ABAJO) */}
                     <section className="glass-card p-6">
                         <div className="flex items-center justify-between mb-6">
                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -1016,61 +1160,34 @@ export default function App() {
                         </div>
                         </div>
                     </section>
-
-                    {/* 2. KPI Principales Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* KPI 1 */}
-                        <div className={`glass-card p-6 border-l-4 ${isCCAhead ? 'border-l-amber-500' : 'border-l-rose-500'}`}>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Venta vs Cuota Hoy</p>
-                            <div className="flex items-end gap-2">
-                                <span className="text-3xl font-black text-slate-900">{fmtMoney(totalSales)}</span>
-                                <span className="text-xs font-bold text-slate-400 mb-1.5">/ {fmtMoney(goalCCToday)}</span>
-                            </div>
-                            <div className="mt-4 flex items-center gap-2">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isCCAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
-                                <i className={`ph-fill ${isCCAhead ? 'ph-trend-up' : 'ph-trend-down'}`}></i>
-                                {isCCAhead ? 'Sobre Cuota' : 'Bajo Cuota'}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* KPI 2 */}
-                        <div className="glass-card p-6 border-l-4 border-l-blue-800">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Run Rate Cierre</p>
-                            <div className="flex items-end gap-2">
-                                <span className="text-3xl font-black text-slate-900">{fmtMoney(daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0)}</span>
-                            </div>
-                            <div className="mt-4">
-                                <span className="text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full uppercase">Proyección Estimada</span>
-                            </div>
-                        </div>
-
-                        {/* KPI 3 */}
-                        <div className="glass-card p-6 border-l-4 border-l-slate-900">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Saldo Pendiente</p>
-                            <div className="flex items-end gap-2">
-                                <span className="text-3xl font-black text-slate-900">{fmtMoney(Math.max(0, goalMonthCC - totalSales))}</span>
-                            </div>
-                            <div className="mt-4">
-                                <span className="text-xs font-bold text-slate-500">Faltan {daysTotal - daysElapsed} días hábiles</span>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                {/* COLUMNA DERECHA (1 SPAN): Market Share (Ocupa 2 filas height) */}
+                {/* COLUMNA DERECHA (1 SPAN): Market Share (MAS DINAMICO) */}
                 <div className="lg:col-span-1">
-                     <div className="glass-card p-6 h-full flex flex-col items-center justify-center">
-                        <div className="w-full text-center mb-6">
+                     <div className="glass-card p-6 h-full flex flex-col items-center justify-center relative overflow-hidden group">
+                        {/* Background Decoration */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+
+                        <div className="w-full text-center mb-6 relative z-10">
                             <h3 className="font-extrabold text-slate-800 flex items-center justify-center gap-2">
-                                <i className="ph ph-chart-pie-slice text-amber-500 text-xl"></i>
+                                <i className="ph ph-chart-pie-slice text-amber-500 text-xl group-hover:scale-110 transition-transform"></i>
                                 Market Share Interno
                             </h3>
                         </div>
-                        <div className="relative w-full aspect-square max-w-[220px]">
+                        
+                        {/* Gráfico Dinámico */}
+                        <div className="relative w-full aspect-square max-w-[220px] transition-transform duration-500 hover:scale-105">
                             <canvas ref={pieChartRef}></canvas>
+                            {/* Centro del gráfico */}
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div className="text-center">
+                                    <span className="block text-xs font-bold text-slate-400">TOTAL</span>
+                                    <span className="block text-lg font-black text-slate-800">{fmtMoney(totalSales)}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div className="mt-8 w-full p-4 rounded-xl bg-slate-900 text-center text-white shadow-xl shadow-slate-900/30 ring-1 ring-white/10">
+
+                        <div className="mt-8 w-full p-4 rounded-xl bg-slate-900 text-center text-white shadow-xl shadow-slate-900/30 ring-1 ring-white/10 relative z-10">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Volumen Total Operado</p>
                             <p className="text-2xl font-black text-white">${totalSales.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
                         </div>
@@ -1079,18 +1196,48 @@ export default function App() {
 
               </div>
               
-              {/* 3. Ventas Día a Día (Debajo de KPIs y Market Share) */}
+              {/* 3. Ventas Día a Día (CON MEJORAS: Comparison & Best Seller) */}
               <section className="glass-card p-6 mt-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
-                      <i className="ph ph-chart-line-up text-amber-500 text-xl"></i>
-                      Ventas Día a Día (Año en Curso)
-                    </h3>
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
-                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                        Tendencia Diaria vs Anterior
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div className="flex items-center gap-3">
+                         <div className="p-2 bg-amber-100 rounded-lg text-amber-600">
+                             <i className="ph-bold ph-chart-line-up text-xl"></i>
+                         </div>
+                         <div>
+                             <h3 className="font-extrabold text-slate-800">Ventas Día a Día</h3>
+                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Año en Curso</p>
+                         </div>
+                    </div>
+                    
+                    {/* Estadísticas de Header (Nuevo) */}
+                    <div className="flex gap-4">
+                        <div className={`px-4 py-2 rounded-xl border flex items-center gap-3 ${growthPct >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
+                            <div className={`text-2xl ${growthPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                <i className={`ph-fill ${growthPct >= 0 ? 'ph-trend-up' : 'ph-trend-down'}`}></i>
+                            </div>
+                            <div>
+                                <div className={`text-lg font-black ${growthPct >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                    {growthPct > 0 ? '+' : ''}{growthPct.toFixed(1)}%
+                                </div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">vs Día Anterior</div>
+                            </div>
+                        </div>
+
+                        <div className="px-4 py-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-3">
+                             <div className="text-2xl text-amber-500">
+                                <i className="ph-fill ph-trophy"></i>
+                            </div>
+                            <div>
+                                <div className="text-sm font-black text-slate-800 flex items-center gap-1">
+                                    {bestAgentToday.name}
+                                    <span className="text-xs font-normal text-slate-500">({fmtMoney(bestAgentToday.sales)})</span>
+                                </div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Mejor Vendedor (Hoy)</div>
+                            </div>
+                        </div>
                     </div>
                   </div>
+                  
                   <div className="h-48 w-full relative">
                      <canvas ref={lineChartRef}></canvas>
                   </div>
