@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { getAnalytics } from "firebase/analytics";
 
 // --- CONFIGURACIÓN FIREBASE ---
@@ -257,7 +257,7 @@ const ConfirmModal = ({ isOpen, onCancel, onConfirm, title, message }) => {
         <p className="text-slate-600 text-sm mb-6 leading-relaxed">{message}</p>
         <div className="flex gap-3 justify-end">
           <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold rounded-lg text-sm transition-colors">Cancelar</button>
-          <button onClick={onConfirm} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm shadow-lg shadow-amber-500/20 transition-all">Sí, reemplazar</button>
+          <button onClick={onConfirm} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm shadow-lg shadow-amber-500/20 transition-all">Sí, actualizar</button>
         </div>
       </div>
     </div>
@@ -652,6 +652,20 @@ export default function App() {
     }
   };
 
+  const deleteYear = async (yearToDelete) => {
+    if (!user) return;
+    try {
+        const updatedAnnual = metrics.annual.filter(item => item.year !== yearToDelete);
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
+        
+        // Actualizamos solo el campo annual
+        await updateDoc(docRef, { annual: updatedAnnual });
+        showNotification(`Año ${yearToDelete} eliminado del histórico`, 'success');
+    } catch (err) {
+        showNotification("Error al eliminar año: " + err.message, 'error');
+    }
+  };
+
   const processFile = (file) => {
     if (typeof XLSX === 'undefined') { showNotification("Librería Excel no lista", 'error'); return; }
     setIsUploading(true);
@@ -679,28 +693,46 @@ export default function App() {
         if (colIndices.name === -1 || colIndices.sales === -1 || colIndices.date === -1) throw new Error("Faltan columnas requeridas");
 
         const annualMap = new Map();
+        
+        // --- LÓGICA DE FUSIÓN (MERGE) ---
+        // 1. Cargar datos históricos existentes primero
+        if (metrics.annual && Array.isArray(metrics.annual)) {
+            metrics.annual.forEach(item => {
+                annualMap.set(item.year, item.total);
+            });
+        }
+        // --- FIN LOGICA DE FUSIÓN PRELIMINAR ---
+
         const dailyMap = new Map();
         const agentsMap = new Map();
         const categoryMap = new Map();
         const dailyAgentSalesMap = new Map();
         let rawDataArray = [];
         
-        // PASO 1: Encontrar la fecha MÁXIMA
+        // PASO 1: Encontrar la fecha MÁXIMA del archivo NUEVO
         let maxDateTimestamp = 0;
+        // Reiniciamos contadores para el AÑO que viene en el archivo, para recalcularlo desde cero con la data nueva
+        // Identificamos qué años vienen en el archivo
+        const yearsInFile = new Set();
+
+        // Primer barrido para identificar años en el archivo
         for(let i = 1; i < jsonData.length; i++) {
-             const row = jsonData[i];
-             if (!row) continue;
-             const rawDate = row[colIndices.date];
-             if (rawDate) {
+            const row = jsonData[i];
+            if (!row) continue;
+            const rawDate = row[colIndices.date];
+            if (rawDate) {
                  let dateObj = null;
                  if (rawDate instanceof Date) dateObj = rawDate;
                  else if (typeof rawDate === 'string') dateObj = new Date(rawDate);
-                 
                  if (dateObj && !isNaN(dateObj.getTime())) {
+                     yearsInFile.add(dateObj.getFullYear());
                      if (dateObj.getTime() > maxDateTimestamp) maxDateTimestamp = dateObj.getTime();
                  }
-             }
+            }
         }
+
+        // Reiniciamos en el mapa SOLO los años que vamos a reemplazar con el archivo nuevo
+        yearsInFile.forEach(y => annualMap.set(y, 0));
         
         const maxDate = maxDateTimestamp > 0 ? new Date(maxDateTimestamp) : new Date();
         const currentYear = maxDate.getFullYear();
@@ -745,10 +777,10 @@ export default function App() {
               });
           }
           
-          // 1. Evolución Histórica: Lee TODOS los años
+          // 1. Evolución Histórica: Actualiza el mapa (que ya tiene los años viejos cargados, y los nuevos reseteados a 0)
           annualMap.set(year, (annualMap.get(year) || 0) + salesVal);
 
-          // 2. Ranking y Globales: Lee SOLO el Año en Curso
+          // 2. Ranking y Globales: Lee SOLO el Año en Curso (del archivo)
           if (year === currentYear) {
               const nameKey = rawName.toLowerCase();
               
@@ -905,7 +937,7 @@ export default function App() {
       <style>{customStyles}</style>
       <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
       {isUploading && <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center"><i className="ph ph-spinner animate-spin text-white text-4xl mb-4"></i><p className="text-white font-bold">Procesando...</p></div>}
-      <ConfirmModal isOpen={showConfirmModal} title="Reemplazar Datos" message="¿Reemplazar datos existentes?" onCancel={cancelReplace} onConfirm={confirmReplace} />
+      <ConfirmModal isOpen={showConfirmModal} title="Actualizar Datos" message="Se detectaron datos nuevos. ¿Deseas fusionarlos con el historial existente?" onCancel={cancelReplace} onConfirm={confirmReplace} />
       <Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} />
 
       <div className="p-4 lg:p-8 animate-fade-in">
@@ -957,42 +989,86 @@ export default function App() {
                 <label className="cursor-pointer px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex gap-2"><i className="ph-bold ph-file-plus"></i> Cargar Datos<input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls" className="hidden" /></label>
              </div>
           ) : view === 'data' ? (
-              // VISTA DE DATOS CRUDOS
-              <div className="glass-card p-6 animate-fade-in">
-                  <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                          <i className="ph-fill ph-database text-amber-500"></i> Base de Datos Cargada
-                      </h3>
-                      <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
-                          {metrics.rawData.length} registros (últimos 2000)
-                      </span>
-                  </div>
-                  <div className="overflow-x-auto custom-scroll max-h-[70vh]">
-                      <table className="w-full text-sm text-left border-collapse">
-                          <thead className="bg-slate-50 sticky top-0 z-10">
-                              <tr>
-                                  <th className="px-4 py-3 font-bold text-slate-600 border-b">Fecha</th>
-                                  <th className="px-4 py-3 font-bold text-slate-600 border-b">Asesor</th>
-                                  <th className="px-4 py-3 font-bold text-slate-600 border-b text-right">Venta</th>
-                                  <th className="px-4 py-3 font-bold text-slate-600 border-b">Categoría</th>
-                                  <th className="px-4 py-3 font-bold text-slate-600 border-b text-right">Cantidad</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                              {metrics.rawData.map((row, idx) => (
-                                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                      <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{row.date}</td>
-                                      <td className="px-4 py-2 font-medium text-slate-800">{row.agent}</td>
-                                      <td className="px-4 py-2 text-right font-bold text-emerald-600">{formatCurrency(row.sales)}</td>
-                                      <td className="px-4 py-2 text-slate-500">{row.category}</td>
-                                      <td className="px-4 py-2 text-right text-slate-500">{row.quantity}</td>
-                                  </tr>
+              // VISTA DE DATOS CRUDOS + GESTIÓN HISTÓRICA
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 animate-fade-in">
+                  
+                  {/* PANEL IZQUIERDO: GESTIÓN DE AÑOS */}
+                  <div className="lg:col-span-1 space-y-6">
+                      <div className="glass-card p-6 bg-slate-900 text-white border-slate-800">
+                          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                              <i className="ph-fill ph-archive"></i> Histórico en Firebase
+                          </h3>
+                          <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                              Estos son los años almacenados actualmente en la base de datos. Puedes eliminar años específicos si deseas limpiar el histórico.
+                          </p>
+                          <div className="space-y-2">
+                              {metrics.annual.sort((a,b) => b.year - a.year).map((item) => (
+                                  <div key={item.year} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-colors group">
+                                      <div className="flex items-center gap-3">
+                                          <div className="w-8 h-8 rounded-full bg-amber-500 text-slate-900 font-bold flex items-center justify-center text-xs shadow-lg shadow-amber-500/20">
+                                              {item.year}
+                                          </div>
+                                          <div>
+                                              <div className="text-sm font-bold text-white">{formatCurrency(item.total)}</div>
+                                              <div className="text-[10px] text-slate-400 uppercase">Venta Total</div>
+                                          </div>
+                                      </div>
+                                      <button 
+                                        onClick={() => {
+                                            if(window.confirm(`¿Estás seguro de eliminar el año ${item.year} del histórico?`)) {
+                                                deleteYear(item.year);
+                                            }
+                                        }}
+                                        className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors"
+                                        title="Eliminar año"
+                                      >
+                                          <i className="ph-bold ph-trash"></i>
+                                      </button>
+                                  </div>
                               ))}
-                          </tbody>
-                      </table>
-                      {metrics.rawData.length === 0 && (
-                          <div className="p-8 text-center text-slate-400">No hay datos crudos disponibles. Carga un archivo nuevamente.</div>
-                      )}
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* PANEL DERECHO: TABLA DE DATOS */}
+                  <div className="lg:col-span-3">
+                    <div className="glass-card p-6 h-full">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <i className="ph-fill ph-database text-amber-500"></i> Última Carga (Raw Data)
+                            </h3>
+                            <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
+                                {metrics.rawData.length} registros (últimos 2000)
+                            </span>
+                        </div>
+                        <div className="overflow-x-auto custom-scroll max-h-[70vh]">
+                            <table className="w-full text-sm text-left border-collapse">
+                                <thead className="bg-slate-50 sticky top-0 z-10">
+                                    <tr>
+                                        <th className="px-4 py-3 font-bold text-slate-600 border-b">Fecha</th>
+                                        <th className="px-4 py-3 font-bold text-slate-600 border-b">Asesor</th>
+                                        <th className="px-4 py-3 font-bold text-slate-600 border-b text-right">Venta</th>
+                                        <th className="px-4 py-3 font-bold text-slate-600 border-b">Categoría</th>
+                                        <th className="px-4 py-3 font-bold text-slate-600 border-b text-right">Cantidad</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {metrics.rawData.map((row, idx) => (
+                                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{row.date}</td>
+                                            <td className="px-4 py-2 font-medium text-slate-800">{row.agent}</td>
+                                            <td className="px-4 py-2 text-right font-bold text-emerald-600">{formatCurrency(row.sales)}</td>
+                                            <td className="px-4 py-2 text-slate-500">{row.category}</td>
+                                            <td className="px-4 py-2 text-right text-slate-500">{row.quantity}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {metrics.rawData.length === 0 && (
+                                <div className="p-8 text-center text-slate-400">No hay datos crudos disponibles. Carga un archivo nuevamente.</div>
+                            )}
+                        </div>
+                    </div>
                   </div>
               </div>
           ) : (
