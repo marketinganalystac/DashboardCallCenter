@@ -44,11 +44,10 @@ const getHolidays = (year) => {
   return [...fixedHolidays, ...variableHolidays];
 };
 
-const getPanamaBusinessDays = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const todayDate = now.getDate();
+const getPanamaBusinessDays = (targetDate = new Date()) => {
+  const year = targetDate.getFullYear();
+  const month = targetDate.getMonth();
+  const todayDate = targetDate.getDate();
   const holidays = getHolidays(year);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   let totalBusinessDays = 0;
@@ -61,7 +60,7 @@ const getPanamaBusinessDays = () => {
     const isSunday = dayOfWeek === 0;
     if (!isSunday && !isHoliday) {
       totalBusinessDays++;
-      if (day < todayDate) elapsedBusinessDays++;
+      if (day <= todayDate) elapsedBusinessDays++;
     }
   }
   return { totalBusinessDays, elapsedBusinessDays };
@@ -312,7 +311,7 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
 };
 
 export default function App() {
-  const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [], categories: [] });
+  const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [], categories: [], currentYear: 0, currentMonthName: '' });
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
@@ -345,6 +344,7 @@ export default function App() {
       setUser(u);
       setLoading(false);
     });
+    // Initial business days fallback to today, but will update when data loads if needed
     const days = getPanamaBusinessDays();
     setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
     return () => unsubscribe();
@@ -375,7 +375,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setMetrics({ agents: [], annual: [], daily: [], categories: [] });
+      setMetrics({ agents: [], annual: [], daily: [], categories: [], currentYear: 0, currentMonthName: '' });
     } catch (error) { console.error(error); }
   };
 
@@ -390,10 +390,12 @@ export default function App() {
             agents: data.agents || [],
             annual: data.annual || [],
             daily: data.daily || [],
-            categories: data.categories || []
+            categories: data.categories || [],
+            currentYear: data.currentYear || new Date().getFullYear(),
+            currentMonthName: data.currentMonthName || ''
         });
       } else {
-        setMetrics({ agents: [], annual: [], daily: [], categories: [] });
+        setMetrics({ agents: [], annual: [], daily: [], categories: [], currentYear: new Date().getFullYear(), currentMonthName: '' });
       }
       setDataLoading(false);
     }, (error) => setDataLoading(false));
@@ -493,11 +495,12 @@ export default function App() {
       });
     }
 
-    // --- BAR CHART ---
+    // --- BAR CHART (HISTORY - 3 YEARS) ---
     if (barChartRef.current) {
       if (barInstance.current) barInstance.current.destroy();
+      // Mostramos todos los años disponibles (o limitamos a 3 si hay muchos, pero la petición dice 3)
       const sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
-      const displayYears = sortedYears.slice(-3);
+      const displayYears = sortedYears; // Ya no usamos .slice(-3) para asegurar que si hay 3, se vean los 3
       const ctxBar = barChartRef.current.getContext('2d');
       
       const gradientCurrent = ctxBar.createLinearGradient(0, 0, 0, 300);
@@ -515,7 +518,11 @@ export default function App() {
           datasets: [{
             label: 'Ventas Totales',
             data: displayYears.map(y => y.total),
-            backgroundColor: (ctx) => (ctx.dataIndex === displayYears.length - 1 ? gradientCurrent : gradientPast),
+            backgroundColor: (ctx) => {
+                // Color diferente para el año actual
+                const year = displayYears[ctx.dataIndex].year;
+                return year === metrics.currentYear ? gradientCurrent : gradientPast;
+            },
             borderRadius: 8,
             barPercentage: 0.5,
           }]
@@ -532,15 +539,14 @@ export default function App() {
       });
     }
 
-    // --- LINE CHART (VENTAS DIARIAS CON TRIANGULOS) ---
+    // --- LINE CHART (VENTAS DIARIAS - MES EN CURSO) ---
     if (lineChartRef.current) {
         if (lineInstance.current) lineInstance.current.destroy();
-        const dailyDataPoints = metrics.daily; 
+        const dailyDataPoints = metrics.daily; // Ahora esto solo contiene el mes en curso
         const labels = dailyDataPoints.map(d => {
             const date = new Date(d.date); 
-            // Ajustamos zona horaria para mostrar fecha correcta si es necesario
-            // pero para formato simple local:
-            return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+            // Mostramos solo el día (ej: "15") o "15 Ene"
+            return date.getDate();
         });
         const dataValues = dailyDataPoints.map(d => d.total);
         
@@ -569,19 +575,15 @@ export default function App() {
                     borderWidth: 3,
                     fill: true,
                     tension: 0.4,
-                    // CONFIGURACIÓN DE LOS PUNTOS (TRIÁNGULOS)
                     pointStyle: 'triangle',
-                    // Rotar triángulo: 0 grados = punta arriba, 180 grados = punta abajo
                     rotation: (ctx) => {
                          const val = growthRates[ctx.dataIndex];
                          return val >= 0 ? 0 : 180;
                     },
                     pointRadius: 6,
                     pointHoverRadius: 9,
-                    // Colores según crecimiento: Verde (Emerald) o Rojo (Rose)
                     pointBackgroundColor: (ctx) => {
                          const val = growthRates[ctx.dataIndex];
-                         // Primer punto neutro o verde
                          if(ctx.dataIndex === 0) return '#f59e0b';
                          return val >= 0 ? '#10b981' : '#f43f5e';
                     },
@@ -595,7 +597,7 @@ export default function App() {
                 interaction: { mode: 'index', intersect: false },
                 scales: {
                     y: { beginAtZero: true, display: false },
-                    x: { grid: { display: false }, ticks: { display: false } }
+                    x: { grid: { display: false }, ticks: { font: {size: 10} } }
                 },
                 plugins: { 
                     legend: { display: false },
@@ -615,7 +617,7 @@ export default function App() {
                             },
                             afterLabel: (context) => {
                                 const idx = context.dataIndex;
-                                if (idx === 0) return 'Inicio de periodo';
+                                if (idx === 0) return 'Inicio mes';
                                 const growth = growthRates[idx];
                                 const sign = growth >= 0 ? '+' : '';
                                 const icon = growth >= 0 ? '▲' : '▼';
@@ -674,18 +676,31 @@ export default function App() {
         const categoryMap = new Map();
         const dailyAgentSalesMap = new Map();
         
-        let maxYear = 0;
+        // PASO 1: Encontrar la fecha MÁXIMA en todo el archivo para definir el "Año en Curso" y "Mes en Curso"
+        let maxDateTimestamp = 0;
         for(let i = 1; i < jsonData.length; i++) {
              const row = jsonData[i];
              if (!row) continue;
              const rawDate = row[colIndices.date];
              if (rawDate) {
-                 const dateObj = new Date(rawDate);
-                 if (!isNaN(dateObj.getTime())) if (dateObj.getFullYear() > maxYear) maxYear = dateObj.getFullYear();
+                 let dateObj = null;
+                 if (rawDate instanceof Date) dateObj = rawDate;
+                 else if (typeof rawDate === 'string') dateObj = new Date(rawDate);
+                 
+                 if (dateObj && !isNaN(dateObj.getTime())) {
+                     if (dateObj.getTime() > maxDateTimestamp) maxDateTimestamp = dateObj.getTime();
+                 }
              }
         }
-        if (maxYear === 0) maxYear = new Date().getFullYear();
+        
+        // Si no hay fechas, usar fecha actual
+        const maxDate = maxDateTimestamp > 0 ? new Date(maxDateTimestamp) : new Date();
+        const currentYear = maxDate.getFullYear();
+        const currentMonth = maxDate.getMonth(); // 0-based
+        const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+        const currentMonthName = monthNames[currentMonth];
 
+        // PASO 2: Procesar datos según reglas
         for(let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i];
           if (!row || !row[colIndices.name]) continue;
@@ -702,11 +717,14 @@ export default function App() {
           if (!dateObj || isNaN(dateObj.getTime())) continue;
 
           const year = dateObj.getFullYear();
+          const month = dateObj.getMonth();
           const dateStr = dateObj.toISOString().split('T')[0]; 
+          
+          // 1. Evolución Histórica: Lee TODOS los años
           annualMap.set(year, (annualMap.get(year) || 0) + salesVal);
 
-          if (year === maxYear) {
-              dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + salesVal);
+          // 2. Ranking y Globales: Lee SOLO el Año en Curso
+          if (year === currentYear) {
               const rawName = String(row[colIndices.name]).trim();
               const nameKey = rawName.toLowerCase();
               
@@ -718,10 +736,6 @@ export default function App() {
                 agentsMap.set(nameKey, { name: rawName, sales: salesVal });
               }
               
-              if (!dailyAgentSalesMap.has(dateStr)) dailyAgentSalesMap.set(dateStr, new Map());
-              const dayAgentMap = dailyAgentSalesMap.get(dateStr);
-              dayAgentMap.set(nameKey, (dayAgentMap.get(nameKey) || 0) + salesVal);
-
               if (colIndices.category !== -1) {
                   const rawCat = String(row[colIndices.category] || "Sin Categoría").trim();
                   let qtyVal = 0;
@@ -738,39 +752,70 @@ export default function App() {
                       categoryMap.set(rawCat, { name: rawCat, sales: salesVal, quantity: qtyVal });
                   }
               }
+
+              // 3. Ventas Diarias: Lee SOLO el Mes en Curso
+              if (month === currentMonth) {
+                  dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + salesVal);
+                  
+                  // Para saber el mejor agente del día (solo necesitamos saberlo para los días del mes actual)
+                  if (!dailyAgentSalesMap.has(dateStr)) dailyAgentSalesMap.set(dateStr, new Map());
+                  const dayAgentMap = dailyAgentSalesMap.get(dateStr);
+                  dayAgentMap.set(nameKey, (dayAgentMap.get(nameKey) || 0) + salesVal);
+              }
           }
         }
 
         const annualArray = Array.from(annualMap, ([year, total]) => ({ year, total }));
         const agentsArray = Array.from(agentsMap.values());
         const categoriesArray = Array.from(categoryMap.values());
+        
+        // Construir array diario SOLO para el mes en curso
         let dailyArray = [];
         if (dailyMap.size > 0) {
             const sortedDates = Array.from(dailyMap.keys()).sort();
-            const startDate = new Date(sortedDates[0]);
-            const endDate = new Date(sortedDates[sortedDates.length - 1]);
-            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-                const dStr = d.toISOString().split('T')[0];
-                let bestAgentInfo = { name: '-', sales: 0 };
-                if (dailyAgentSalesMap.has(dStr)) {
-                    const dayAgentMap = dailyAgentSalesMap.get(dStr);
-                    let maxSales = -1;
-                    for (const [agentKey, val] of dayAgentMap.entries()) {
-                        if (val > maxSales) {
-                            maxSales = val;
-                            const prettyName = agentsMap.get(agentKey)?.name || agentKey;
-                            bestAgentInfo = { name: prettyName, sales: val };
+            // Llenar huecos de días sin venta dentro del rango del mes encontrado
+            if (sortedDates.length > 0) {
+                 const startDate = new Date(sortedDates[0]);
+                 const endDate = new Date(sortedDates[sortedDates.length - 1]);
+                 
+                 for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+                    const dStr = d.toISOString().split('T')[0];
+                    let bestAgentInfo = { name: '-', sales: 0 };
+                    
+                    if (dailyAgentSalesMap.has(dStr)) {
+                        const dayAgentMap = dailyAgentSalesMap.get(dStr);
+                        let maxSales = -1;
+                        for (const [agentKey, val] of dayAgentMap.entries()) {
+                            if (val > maxSales) {
+                                maxSales = val;
+                                const prettyName = agentsMap.get(agentKey)?.name || agentKey; // Fallback to key if needed, but simple name is better
+                                // Need original casing name? We used rawName in agentsMap
+                                // Let's use name from agentsMap to ensure consistency
+                                const storedName = agentsMap.get(agentKey)?.name || "Agente";
+                                bestAgentInfo = { name: storedName, sales: val };
+                            }
                         }
                     }
-                }
-                dailyArray.push({ date: dStr, total: dailyMap.get(dStr) || 0, bestAgent: bestAgentInfo });
+                    dailyArray.push({ date: dStr, total: dailyMap.get(dStr) || 0, bestAgent: bestAgentInfo });
+                 }
             }
         }
+        
+        // Actualizar días hábiles basados en la fecha del archivo
+        const days = getPanamaBusinessDays(maxDate);
+        setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
 
         if(annualArray.length > 0 && user) {
-            const payload = { agents: agentsArray, annual: annualArray, daily: dailyArray, categories: categoriesArray };
+            const payload = { 
+                agents: agentsArray, 
+                annual: annualArray, 
+                daily: dailyArray, 
+                categories: categoriesArray,
+                currentYear: currentYear,
+                currentMonthName: currentMonthName
+            };
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period'), payload);
-            showNotification(`✅ Datos actualizados. Año: ${maxYear}`);
+            showNotification(`✅ Datos actualizados. Año: ${currentYear}, Mes: ${currentMonthName}`);
         }
       } catch (err) { showNotification("Error: " + err.message, 'error'); } 
       finally { setIsUploading(false); setPendingFile(null); }
@@ -840,7 +885,7 @@ export default function App() {
                 <div className="p-2 bg-slate-900 rounded-xl shadow-lg shadow-slate-900/20">
                   <i className="ph-fill ph-chart-line-up text-amber-500 text-2xl"></i>
                 </div>
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Tablero Directivo</h1>
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Tablero Directivo <span className="text-amber-600 ml-2 text-xl">{metrics.currentYear}</span></h1>
               </div>
               <p className="text-slate-500 font-medium ml-12">Analítica de Rendimiento y Control de Metas</p>
             </div>
@@ -872,7 +917,7 @@ export default function App() {
                         <div className={`glass-card p-5 border-l-4 ${isCCAhead ? 'border-l-emerald-500' : 'border-l-rose-500'} flex items-center gap-5 relative overflow-hidden`}>
                             <CircularProgress value={totalSales} max={goalCCToday} color={isCCAhead ? 'text-emerald-500' : 'text-rose-500'} size={76} />
                             <div className="flex-1 z-10">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Ventas vs Meta Hoy</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Ventas vs Meta Hoy ({metrics.currentYear})</p>
                                 <div className="flex flex-col">
                                     <span className="text-2xl font-black text-slate-900"><AnimatedCounter value={totalSales} prefix="$" /></span>
                                     <span className="text-[10px] font-bold text-slate-400 mt-1">Meta: {formatCurrency(goalCCToday)}</span>
@@ -954,6 +999,7 @@ export default function App() {
                                 <i className="ph-fill ph-chart-pie-slice text-amber-500 text-lg"></i>
                                 Cuota de Mercado
                             </h3>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">{metrics.currentYear}</p>
                         </div>
                         
                         <div className="relative w-full aspect-square max-w-[200px] transition-transform duration-500 hover:scale-105 cursor-pointer">
@@ -983,7 +1029,7 @@ export default function App() {
                          </div>
                          <div>
                              <h3 className="text-lg font-extrabold text-slate-800">Ventas Diarias</h3>
-                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Seguimiento Diario</p>
+                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Seguimiento Diario - <span className="text-amber-600">{metrics.currentMonthName}</span></p>
                          </div>
                     </div>
                     
@@ -1024,7 +1070,7 @@ export default function App() {
                   <div className="p-6 bg-gradient-to-r from-white via-slate-50 to-white border-b border-slate-100">
                     <h2 className="font-extrabold text-slate-800 flex items-center gap-2 text-lg justify-center md:justify-start">
                       <i className="ph-fill ph-medal text-amber-500 text-2xl"></i>
-                      Ranking de Campeones
+                      Ranking de Campeones ({metrics.currentYear})
                     </h2>
                   </div>
 
