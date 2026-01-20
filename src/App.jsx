@@ -504,45 +504,133 @@ export default function App() {
       });
     }
 
-    // --- BAR CHART (HISTORY - ALL YEARS) ---
+    // --- BAR CHART (HISTORY - STACKED PER AGENT) ---
     if (barChartRef.current) {
       if (barInstance.current) barInstance.current.destroy();
       // Mostrar todos los años ordenados
       const sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
-      const displayYears = sortedYears; 
+      const yearsLabels = sortedYears.map(y => y.year);
+      
+      // 1. Identificar TODOS los agentes únicos a través de todos los años
+      const allAgentsSet = new Set();
+      sortedYears.forEach(yearData => {
+          if (yearData.agents) {
+              Object.keys(yearData.agents).forEach(agent => allAgentsSet.add(agent));
+          }
+      });
+      const allAgents = Array.from(allAgentsSet);
+      
+      // Colores para los agentes (Paleta dinámica)
+      const colors = ['#0f172a', '#f59e0b', '#334155', '#fbbf24', '#94a3b8', '#64748b', '#d97706', '#475569'];
+      
+      const datasets = [];
+
+      // Dataset para CADA agente (Stacked Bars)
+      allAgents.forEach((agent, index) => {
+          const data = sortedYears.map(yearData => {
+              // Si existe el desglose por agente, usarlo. Si no (data antigua), poner 0 o manejar en 'Otros'
+              return yearData.agents ? (yearData.agents[agent] || 0) : 0;
+          });
+          
+          datasets.push({
+              label: agent.split(' ')[0], // Nombre corto
+              data: data,
+              backgroundColor: colors[index % colors.length],
+              stack: 'Stack 0',
+              borderRadius: 4,
+          });
+      });
+
+      // Dataset para data antigua sin desglose (si existe)
+      const unknownData = sortedYears.map(yearData => {
+          // Si NO tiene propiedad 'agents', asumimos que es un total antiguo sin desglose
+          return !yearData.agents ? yearData.total : 0;
+      });
+      
+      if (unknownData.some(v => v > 0)) {
+           datasets.push({
+              label: 'Sin Desglose',
+              data: unknownData,
+              backgroundColor: '#cbd5e1',
+              stack: 'Stack 0',
+              borderRadius: 4,
+          });
+      }
+
+      // Dataset para LA META (Línea Punteada)
+      // Meta = 15k * 3 agentes * 12 meses = 540,000
+      const annualGoal = 15000 * 3 * 12;
+      datasets.push({
+          label: 'Meta Anual',
+          data: sortedYears.map(() => annualGoal),
+          type: 'line',
+          borderColor: '#e11d48', // Rojo rosado
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          fill: false,
+          order: 0 // Dibujar encima
+      });
+
       const ctxBar = barChartRef.current.getContext('2d');
       
-      const gradientCurrent = ctxBar.createLinearGradient(0, 0, 0, 300);
-      gradientCurrent.addColorStop(0, '#f59e0b');
-      gradientCurrent.addColorStop(1, '#d97706');
-
-      const gradientPast = ctxBar.createLinearGradient(0, 0, 0, 300);
-      gradientPast.addColorStop(0, '#1e293b');
-      gradientPast.addColorStop(1, '#0f172a');
-
       barInstance.current = new Chart(ctxBar, {
         type: 'bar',
         data: {
-          labels: displayYears.map(y => y.year),
-          datasets: [{
-            label: 'Ventas Totales',
-            data: displayYears.map(y => y.total),
-            backgroundColor: (ctx) => {
-                const year = displayYears[ctx.dataIndex].year;
-                return year === metrics.currentYear ? gradientCurrent : gradientPast;
-            },
-            borderRadius: 8,
-            barPercentage: 0.5,
-          }]
+          labels: yearsLabels,
+          datasets: datasets
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            y: { beginAtZero: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { callback: v => '$' + v/1000 + 'k', font: {size: 10} }, border: { display: false } },
-            x: { grid: { display: false }, ticks: { font: {weight: 'bold'} } }
+            y: { 
+                beginAtZero: true, 
+                stacked: true, // Apilado
+                grid: { color: '#f1f5f9', drawBorder: false }, 
+                ticks: { callback: v => '$' + v/1000 + 'k', font: {size: 10} }, 
+                border: { display: false } 
+            },
+            x: { 
+                stacked: true, // Apilado
+                grid: { display: false }, 
+                ticks: { font: {weight: 'bold'} } 
+            }
           },
-          plugins: { legend: { display: false } }
+          plugins: { 
+              legend: { 
+                  display: true,
+                  position: 'bottom',
+                  labels: { usePointStyle: true, boxWidth: 8, font: {size: 10} }
+              },
+              tooltip: {
+                  callbacks: {
+                      label: (context) => {
+                          let label = context.dataset.label || '';
+                          if (label) {
+                              label += ': ';
+                          }
+                          if (context.parsed.y !== null) {
+                              label += new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(context.parsed.y);
+                          }
+                          
+                          // Lógica de Diferencia % vs Año Anterior
+                          if (context.dataset.type === 'bar' && context.dataIndex > 0) {
+                              const currentVal = context.parsed.y;
+                              const prevVal = context.dataset.data[context.dataIndex - 1];
+                              
+                              if (prevVal > 0) {
+                                  const diff = ((currentVal - prevVal) / prevVal) * 100;
+                                  const sign = diff >= 0 ? '+' : '';
+                                  label += ` (${sign}${diff.toFixed(1)}% vs año ant.)`;
+                              }
+                          }
+                          
+                          return label;
+                      }
+                  }
+              }
+          }
         }
       });
     }
@@ -692,13 +780,17 @@ export default function App() {
         }
         if (colIndices.name === -1 || colIndices.sales === -1 || colIndices.date === -1) throw new Error("Faltan columnas requeridas");
 
-        const annualMap = new Map();
+        const annualMap = new Map(); // year -> { total: 0, agents: {} }
         
         // --- LÓGICA DE FUSIÓN (MERGE) ---
         // 1. Cargar datos históricos existentes primero
         if (metrics.annual && Array.isArray(metrics.annual)) {
             metrics.annual.forEach(item => {
-                annualMap.set(item.year, item.total);
+                // Preservar estructura antigua si no tiene 'agents'
+                annualMap.set(item.year, {
+                    total: item.total,
+                    agents: item.agents || {} // Si no hay agentes (data vieja), iniciamos vacío
+                });
             });
         }
         // --- FIN LOGICA DE FUSIÓN PRELIMINAR ---
@@ -709,10 +801,8 @@ export default function App() {
         const dailyAgentSalesMap = new Map();
         let rawDataArray = [];
         
-        // PASO 1: Encontrar la fecha MÁXIMA del archivo NUEVO
+        // PASO 1: Encontrar la fecha MÁXIMA del archivo NUEVO y AÑOS PRESENTES
         let maxDateTimestamp = 0;
-        // Reiniciamos contadores para el AÑO que viene en el archivo, para recalcularlo desde cero con la data nueva
-        // Identificamos qué años vienen en el archivo
         const yearsInFile = new Set();
 
         // Primer barrido para identificar años en el archivo
@@ -731,8 +821,8 @@ export default function App() {
             }
         }
 
-        // Reiniciamos en el mapa SOLO los años que vamos a reemplazar con el archivo nuevo
-        yearsInFile.forEach(y => annualMap.set(y, 0));
+        // Reiniciamos en el mapa SOLO los años que vamos a reemplazar con el archivo nuevo (para recalcular totales y agentes)
+        yearsInFile.forEach(y => annualMap.set(y, { total: 0, agents: {} }));
         
         const maxDate = maxDateTimestamp > 0 ? new Date(maxDateTimestamp) : new Date();
         const currentYear = maxDate.getFullYear();
@@ -777,8 +867,17 @@ export default function App() {
               });
           }
           
-          // 1. Evolución Histórica: Actualiza el mapa (que ya tiene los años viejos cargados, y los nuevos reseteados a 0)
-          annualMap.set(year, (annualMap.get(year) || 0) + salesVal);
+          // 1. Evolución Histórica: Actualiza el mapa (Objetos complejos ahora)
+          const annualEntry = annualMap.get(year);
+          if (annualEntry) {
+              annualEntry.total += salesVal;
+              // Guardar por agente también para el gráfico stacked
+              // Normalizamos nombre (ej. tomar primer nombre o nombre completo)
+              // Usamos el nombre tal cual viene para evitar duplicados si hay "Juan P." y "Juan G."
+              const agentKey = rawName; 
+              annualEntry.agents[agentKey] = (annualEntry.agents[agentKey] || 0) + salesVal;
+              annualMap.set(year, annualEntry);
+          }
 
           // 2. Ranking y Globales: Lee SOLO el Año en Curso (del archivo)
           if (year === currentYear) {
@@ -820,7 +919,13 @@ export default function App() {
           }
         }
 
-        const annualArray = Array.from(annualMap, ([year, total]) => ({ year, total }));
+        // Convertir annualMap de nuevo a Array para guardar
+        const annualArray = Array.from(annualMap, ([year, data]) => ({ 
+            year, 
+            total: data.total,
+            agents: data.agents // Nuevo campo
+        }));
+
         const agentsArray = Array.from(agentsMap.values());
         const categoriesArray = Array.from(categoryMap.values());
         
