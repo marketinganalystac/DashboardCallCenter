@@ -311,10 +311,11 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
 };
 
 export default function App() {
-  const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [], categories: [], currentYear: 0, currentMonthName: '' });
+  const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [], categories: [], currentYear: 0, currentMonthName: '', rawData: [] });
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
+  const [view, setView] = useState('dashboard'); // 'dashboard' | 'data'
   
   const [isUploading, setIsUploading] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -375,7 +376,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setMetrics({ agents: [], annual: [], daily: [], categories: [], currentYear: 0, currentMonthName: '' });
+      setMetrics({ agents: [], annual: [], daily: [], categories: [], currentYear: 0, currentMonthName: '', rawData: [] });
     } catch (error) { console.error(error); }
   };
 
@@ -392,10 +393,11 @@ export default function App() {
             daily: data.daily || [],
             categories: data.categories || [],
             currentYear: data.currentYear || new Date().getFullYear(),
-            currentMonthName: data.currentMonthName || ''
+            currentMonthName: data.currentMonthName || '',
+            rawData: data.rawData || []
         });
       } else {
-        setMetrics({ agents: [], annual: [], daily: [], categories: [], currentYear: new Date().getFullYear(), currentMonthName: '' });
+        setMetrics({ agents: [], annual: [], daily: [], categories: [], currentYear: new Date().getFullYear(), currentMonthName: '', rawData: [] });
       }
       setDataLoading(false);
     }, (error) => setDataLoading(false));
@@ -442,8 +444,8 @@ export default function App() {
 
   useEffect(() => {
     if (typeof Chart === 'undefined') return;
-    updateCharts();
-  }, [metrics]);
+    if (view === 'dashboard') updateCharts();
+  }, [metrics, view]);
 
   const updateCharts = () => {
     if (typeof Chart === 'undefined') return;
@@ -495,12 +497,12 @@ export default function App() {
       });
     }
 
-    // --- BAR CHART (HISTORY - 3 YEARS) ---
+    // --- BAR CHART (HISTORY - ALL YEARS) ---
     if (barChartRef.current) {
       if (barInstance.current) barInstance.current.destroy();
-      // Mostramos todos los años disponibles (o limitamos a 3 si hay muchos, pero la petición dice 3)
+      // Mostrar todos los años ordenados
       const sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
-      const displayYears = sortedYears; // Ya no usamos .slice(-3) para asegurar que si hay 3, se vean los 3
+      const displayYears = sortedYears; 
       const ctxBar = barChartRef.current.getContext('2d');
       
       const gradientCurrent = ctxBar.createLinearGradient(0, 0, 0, 300);
@@ -519,7 +521,6 @@ export default function App() {
             label: 'Ventas Totales',
             data: displayYears.map(y => y.total),
             backgroundColor: (ctx) => {
-                // Color diferente para el año actual
                 const year = displayYears[ctx.dataIndex].year;
                 return year === metrics.currentYear ? gradientCurrent : gradientPast;
             },
@@ -542,10 +543,9 @@ export default function App() {
     // --- LINE CHART (VENTAS DIARIAS - MES EN CURSO) ---
     if (lineChartRef.current) {
         if (lineInstance.current) lineInstance.current.destroy();
-        const dailyDataPoints = metrics.daily; // Ahora esto solo contiene el mes en curso
+        const dailyDataPoints = metrics.daily; 
         const labels = dailyDataPoints.map(d => {
-            const date = new Date(d.date); 
-            // Mostramos solo el día (ej: "15") o "15 Ene"
+            const date = new Date(d.date + 'T00:00:00'); // Force local interpretation
             return date.getDate();
         });
         const dataValues = dailyDataPoints.map(d => d.total);
@@ -675,8 +675,9 @@ export default function App() {
         const agentsMap = new Map();
         const categoryMap = new Map();
         const dailyAgentSalesMap = new Map();
+        let rawDataArray = [];
         
-        // PASO 1: Encontrar la fecha MÁXIMA en todo el archivo para definir el "Año en Curso" y "Mes en Curso"
+        // PASO 1: Encontrar la fecha MÁXIMA
         let maxDateTimestamp = 0;
         for(let i = 1; i < jsonData.length; i++) {
              const row = jsonData[i];
@@ -693,14 +694,13 @@ export default function App() {
              }
         }
         
-        // Si no hay fechas, usar fecha actual
         const maxDate = maxDateTimestamp > 0 ? new Date(maxDateTimestamp) : new Date();
         const currentYear = maxDate.getFullYear();
         const currentMonth = maxDate.getMonth(); // 0-based
         const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
         const currentMonthName = monthNames[currentMonth];
 
-        // PASO 2: Procesar datos según reglas
+        // PASO 2: Procesar datos
         for(let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i];
           if (!row || !row[colIndices.name]) continue;
@@ -718,14 +718,28 @@ export default function App() {
 
           const year = dateObj.getFullYear();
           const month = dateObj.getMonth();
-          const dateStr = dateObj.toISOString().split('T')[0]; 
+          const dateStr = dateObj.toISOString().split('T')[0];
+          
+          const rawName = String(row[colIndices.name]).trim();
+          
+          // Guardar para vista "Base de Datos" (Limitado para no saturar Firestore)
+          if (rawDataArray.length < 2000) {
+              const rawCat = colIndices.category !== -1 ? String(row[colIndices.category] || "-").trim() : "-";
+              const rawQty = colIndices.quantity !== -1 ? (row[colIndices.quantity] || 0) : 0;
+              rawDataArray.push({
+                  date: dateStr,
+                  agent: rawName,
+                  sales: salesVal,
+                  category: rawCat,
+                  quantity: rawQty
+              });
+          }
           
           // 1. Evolución Histórica: Lee TODOS los años
           annualMap.set(year, (annualMap.get(year) || 0) + salesVal);
 
           // 2. Ranking y Globales: Lee SOLO el Año en Curso
           if (year === currentYear) {
-              const rawName = String(row[colIndices.name]).trim();
               const nameKey = rawName.toLowerCase();
               
               if (agentsMap.has(nameKey)) {
@@ -757,7 +771,6 @@ export default function App() {
               if (month === currentMonth) {
                   dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + salesVal);
                   
-                  // Para saber el mejor agente del día (solo necesitamos saberlo para los días del mes actual)
                   if (!dailyAgentSalesMap.has(dateStr)) dailyAgentSalesMap.set(dateStr, new Map());
                   const dayAgentMap = dailyAgentSalesMap.get(dateStr);
                   dayAgentMap.set(nameKey, (dayAgentMap.get(nameKey) || 0) + salesVal);
@@ -769,15 +782,14 @@ export default function App() {
         const agentsArray = Array.from(agentsMap.values());
         const categoriesArray = Array.from(categoryMap.values());
         
-        // Construir array diario SOLO para el mes en curso
         let dailyArray = [];
         if (dailyMap.size > 0) {
             const sortedDates = Array.from(dailyMap.keys()).sort();
-            // Llenar huecos de días sin venta dentro del rango del mes encontrado
             if (sortedDates.length > 0) {
                  const startDate = new Date(sortedDates[0]);
                  const endDate = new Date(sortedDates[sortedDates.length - 1]);
-                 
+                 // Iteramos día por día para llenar huecos, pero nos aseguramos de no salirnos del mes lógico si hubiera saltos raros
+                 // Usamos UTC para evitar problemas de zona horaria en el loop
                  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
                     const dStr = d.toISOString().split('T')[0];
                     let bestAgentInfo = { name: '-', sales: 0 };
@@ -788,9 +800,6 @@ export default function App() {
                         for (const [agentKey, val] of dayAgentMap.entries()) {
                             if (val > maxSales) {
                                 maxSales = val;
-                                const prettyName = agentsMap.get(agentKey)?.name || agentKey; // Fallback to key if needed, but simple name is better
-                                // Need original casing name? We used rawName in agentsMap
-                                // Let's use name from agentsMap to ensure consistency
                                 const storedName = agentsMap.get(agentKey)?.name || "Agente";
                                 bestAgentInfo = { name: storedName, sales: val };
                             }
@@ -801,9 +810,11 @@ export default function App() {
             }
         }
         
-        // Actualizar días hábiles basados en la fecha del archivo
         const days = getPanamaBusinessDays(maxDate);
         setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
+
+        // Ordenamos rawData por fecha descendente
+        rawDataArray.sort((a, b) => new Date(b.date) - new Date(a.date));
 
         if(annualArray.length > 0 && user) {
             const payload = { 
@@ -812,7 +823,8 @@ export default function App() {
                 daily: dailyArray, 
                 categories: categoriesArray,
                 currentYear: currentYear,
-                currentMonthName: currentMonthName
+                currentMonthName: currentMonthName,
+                rawData: rawDataArray
             };
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period'), payload);
             showNotification(`✅ Datos actualizados. Año: ${currentYear}, Mes: ${currentMonthName}`);
@@ -863,6 +875,11 @@ export default function App() {
     .metric-mini-exec { background: rgba(255, 255, 255, 0.5); border: 1px solid rgba(255,255,255,0.6); border-radius: 16px; padding: 1rem; text-align: center; transition: all 0.3s; }
     .metric-mini-exec:hover { background: #fff; transform: scale(1.02); border-color: #f59e0b; }
     .fill-mode-forwards { animation-fill-mode: forwards; }
+    /* Scrollbar para tabla */
+    .custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   `;
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><i className="ph ph-spinner animate-spin text-amber-500 text-4xl"></i></div>;
@@ -889,12 +906,31 @@ export default function App() {
               </div>
               <p className="text-slate-500 font-medium ml-12">Analítica de Rendimiento y Control de Metas</p>
             </div>
-            <div className="flex flex-wrap items-center gap-4 bg-white/60 backdrop-blur-md p-2 rounded-2xl border border-white/50">
-              <label className="group cursor-pointer px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-xl shadow-slate-900/20 hover:shadow-slate-900/40 transform hover:-translate-y-0.5">
-                <i className="ph ph-file-xls font-bold text-amber-500"></i><span>Importar</span>
-                <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls, .csv" className="hidden" />
-              </label>
-              <button onClick={handleLogout} className="px-4 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 rounded-xl text-sm font-bold transition-all"><i className="ph-bold ph-sign-out"></i></button>
+            
+            <div className="flex items-center gap-4">
+                {/* View Toggle */}
+                <div className="bg-white/80 backdrop-blur p-1 rounded-xl border border-slate-200 flex shadow-sm">
+                    <button 
+                        onClick={() => setView('dashboard')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${view === 'dashboard' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                        <i className="ph-bold ph-squares-four"></i> Tablero
+                    </button>
+                    <button 
+                        onClick={() => setView('data')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${view === 'data' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                        <i className="ph-bold ph-table"></i> Base de Datos
+                    </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 bg-white/60 backdrop-blur-md p-2 rounded-2xl border border-white/50">
+                <label className="group cursor-pointer px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-xl shadow-slate-900/20 hover:shadow-slate-900/40 transform hover:-translate-y-0.5">
+                    <i className="ph ph-file-xls font-bold text-amber-500"></i><span>Importar</span>
+                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls, .csv" className="hidden" />
+                </label>
+                <button onClick={handleLogout} className="px-4 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 rounded-xl text-sm font-bold transition-all"><i className="ph-bold ph-sign-out"></i></button>
+                </div>
             </div>
           </header>
 
@@ -905,7 +941,47 @@ export default function App() {
                 <p className="text-slate-500 max-w-sm mb-6">Importa tu archivo Excel de ventas para generar las visualizaciones.</p>
                 <label className="cursor-pointer px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex gap-2"><i className="ph-bold ph-file-plus"></i> Cargar Datos<input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls" className="hidden" /></label>
              </div>
+          ) : view === 'data' ? (
+              // VISTA DE DATOS CRUDOS
+              <div className="glass-card p-6 animate-fade-in">
+                  <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                          <i className="ph-fill ph-database text-amber-500"></i> Base de Datos Cargada
+                      </h3>
+                      <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
+                          {metrics.rawData.length} registros (últimos 2000)
+                      </span>
+                  </div>
+                  <div className="overflow-x-auto custom-scroll max-h-[70vh]">
+                      <table className="w-full text-sm text-left border-collapse">
+                          <thead className="bg-slate-50 sticky top-0 z-10">
+                              <tr>
+                                  <th className="px-4 py-3 font-bold text-slate-600 border-b">Fecha</th>
+                                  <th className="px-4 py-3 font-bold text-slate-600 border-b">Asesor</th>
+                                  <th className="px-4 py-3 font-bold text-slate-600 border-b text-right">Venta</th>
+                                  <th className="px-4 py-3 font-bold text-slate-600 border-b">Categoría</th>
+                                  <th className="px-4 py-3 font-bold text-slate-600 border-b text-right">Cantidad</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                              {metrics.rawData.map((row, idx) => (
+                                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                      <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{row.date}</td>
+                                      <td className="px-4 py-2 font-medium text-slate-800">{row.agent}</td>
+                                      <td className="px-4 py-2 text-right font-bold text-emerald-600">{formatCurrency(row.sales)}</td>
+                                      <td className="px-4 py-2 text-slate-500">{row.category}</td>
+                                      <td className="px-4 py-2 text-right text-slate-500">{row.quantity}</td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                      {metrics.rawData.length === 0 && (
+                          <div className="p-8 text-center text-slate-400">No hay datos crudos disponibles. Carga un archivo nuevamente.</div>
+                      )}
+                  </div>
+              </div>
           ) : (
+            // VISTA DASHBOARD (Original)
             <>
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 
