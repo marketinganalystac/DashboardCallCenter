@@ -75,7 +75,7 @@ const getInitials = (name) => {
 };
 
 const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('es-PA', {
         style: 'currency',
         currency: 'USD',
         minimumFractionDigits: 0,
@@ -114,7 +114,7 @@ const AnimatedCounter = ({ value, duration = 1500, prefix = '' }) => {
     }, [value, duration]);
 
     return (
-        <span>{prefix}{count.toLocaleString('en-US')}</span>
+        <span>{prefix}{count.toLocaleString('es-PA')}</span>
     );
 };
 
@@ -288,13 +288,13 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
              <i className="ph-fill ph-chart-polar text-amber-500 text-3xl"></i>
           </div>
           <h1 className="text-2xl font-bold text-white mb-1">Bienvenido</h1>
-          <p className="text-slate-400 text-sm">Executive Dashboard Access</p>
+          <p className="text-slate-400 text-sm">Acceso al Tablero Directivo</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && <div className="p-3 bg-rose-500/20 border border-rose-500/50 rounded-lg text-rose-200 text-xs text-center">{error}</div>}
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-300 uppercase ml-1">Email</label>
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl py-2.5 px-4 focus:outline-none focus:border-amber-500" placeholder="user@company.com" />
+            <label className="text-xs font-bold text-slate-300 uppercase ml-1">Correo Electrónico</label>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl py-2.5 px-4 focus:outline-none focus:border-amber-500" placeholder="usuario@empresa.com" />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-300 uppercase ml-1">Contraseña</label>
@@ -452,7 +452,7 @@ export default function App() {
 
     const processedAgents = [...metrics.agents].sort((a, b) => b.sales - a.sales);
     
-    // --- PIE CHART ---
+    // --- PIE CHART (DOUGHNUT) ---
     if (pieChartRef.current) {
       if (pieInstance.current) pieInstance.current.destroy();
       const ctxPie = pieChartRef.current.getContext('2d');
@@ -532,15 +532,25 @@ export default function App() {
       });
     }
 
-    // --- LINE CHART ---
+    // --- LINE CHART (VENTAS DIARIAS CON TRIANGULOS) ---
     if (lineChartRef.current) {
         if (lineInstance.current) lineInstance.current.destroy();
         const dailyDataPoints = metrics.daily; 
         const labels = dailyDataPoints.map(d => {
             const date = new Date(d.date); 
+            // Ajustamos zona horaria para mostrar fecha correcta si es necesario
+            // pero para formato simple local:
             return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
         });
         const dataValues = dailyDataPoints.map(d => d.total);
+        
+        // CÁLCULO DE CRECIMIENTO VS DÍA ANTERIOR
+        const growthRates = dataValues.map((val, i) => {
+            if (i === 0) return 0;
+            const prev = dataValues[i-1];
+            return prev === 0 ? 0 : ((val - prev) / prev) * 100;
+        });
+
         const ctxLine = lineChartRef.current.getContext('2d');
         
         const gradient = ctxLine.createLinearGradient(0, 0, 0, 300);
@@ -557,12 +567,26 @@ export default function App() {
                     borderColor: '#f59e0b',
                     backgroundColor: gradient,
                     borderWidth: 3,
-                    pointRadius: 0,
-                    pointHoverRadius: 6,
-                    pointBackgroundColor: '#fff',
-                    pointBorderColor: '#f59e0b',
                     fill: true,
-                    tension: 0.4
+                    tension: 0.4,
+                    // CONFIGURACIÓN DE LOS PUNTOS (TRIÁNGULOS)
+                    pointStyle: 'triangle',
+                    // Rotar triángulo: 0 grados = punta arriba, 180 grados = punta abajo
+                    rotation: (ctx) => {
+                         const val = growthRates[ctx.dataIndex];
+                         return val >= 0 ? 0 : 180;
+                    },
+                    pointRadius: 6,
+                    pointHoverRadius: 9,
+                    // Colores según crecimiento: Verde (Emerald) o Rojo (Rose)
+                    pointBackgroundColor: (ctx) => {
+                         const val = growthRates[ctx.dataIndex];
+                         // Primer punto neutro o verde
+                         if(ctx.dataIndex === 0) return '#f59e0b';
+                         return val >= 0 ? '#10b981' : '#f43f5e';
+                    },
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
                 }]
             },
             options: {
@@ -573,7 +597,33 @@ export default function App() {
                     y: { beginAtZero: true, display: false },
                     x: { grid: { display: false }, ticks: { display: false } }
                 },
-                plugins: { legend: { display: false } }
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#f8fafc',
+                        bodyColor: '#cbd5e1',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: (context) => {
+                                let label = 'Venta: ';
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(context.parsed.y);
+                                }
+                                return label;
+                            },
+                            afterLabel: (context) => {
+                                const idx = context.dataIndex;
+                                if (idx === 0) return 'Inicio de periodo';
+                                const growth = growthRates[idx];
+                                const sign = growth >= 0 ? '+' : '';
+                                const icon = growth >= 0 ? '▲' : '▼';
+                                return `Variación: ${icon} ${sign}${growth.toFixed(1)}% vs ayer`;
+                            }
+                        }
+                    }
+                }
             }
         });
     }
@@ -790,9 +840,9 @@ export default function App() {
                 <div className="p-2 bg-slate-900 rounded-xl shadow-lg shadow-slate-900/20">
                   <i className="ph-fill ph-chart-line-up text-amber-500 text-2xl"></i>
                 </div>
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Executive Dashboard</h1>
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Tablero Directivo</h1>
               </div>
-              <p className="text-slate-500 font-medium ml-12">Performance Analytics & Control de Metas</p>
+              <p className="text-slate-500 font-medium ml-12">Analítica de Rendimiento y Control de Metas</p>
             </div>
             <div className="flex flex-wrap items-center gap-4 bg-white/60 backdrop-blur-md p-2 rounded-2xl border border-white/50">
               <label className="group cursor-pointer px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-xl shadow-slate-900/20 hover:shadow-slate-900/40 transform hover:-translate-y-0.5">
@@ -806,7 +856,7 @@ export default function App() {
           {metrics.agents.length === 0 ? (
              <div className="min-h-[60vh] flex flex-col justify-center items-center text-center bg-white/40 rounded-3xl border-2 border-dashed border-slate-300">
                 <div className="p-6 bg-white rounded-full text-amber-500 shadow-xl mb-6"><i className="ph-duotone ph-upload-simple text-5xl"></i></div>
-                <h2 className="text-2xl font-bold text-slate-800 mb-2">Dashboard Vacío</h2>
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">Tablero Vacío</h2>
                 <p className="text-slate-500 max-w-sm mb-6">Importa tu archivo Excel de ventas para generar las visualizaciones.</p>
                 <label className="cursor-pointer px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex gap-2"><i className="ph-bold ph-file-plus"></i> Cargar Datos<input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls" className="hidden" /></label>
              </div>
@@ -822,7 +872,7 @@ export default function App() {
                         <div className={`glass-card p-5 border-l-4 ${isCCAhead ? 'border-l-emerald-500' : 'border-l-rose-500'} flex items-center gap-5 relative overflow-hidden`}>
                             <CircularProgress value={totalSales} max={goalCCToday} color={isCCAhead ? 'text-emerald-500' : 'text-rose-500'} size={76} />
                             <div className="flex-1 z-10">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Venta vs Cuota Hoy</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Ventas vs Meta Hoy</p>
                                 <div className="flex flex-col">
                                     <span className="text-2xl font-black text-slate-900"><AnimatedCounter value={totalSales} prefix="$" /></span>
                                     <span className="text-[10px] font-bold text-slate-400 mt-1">Meta: {formatCurrency(goalCCToday)}</span>
@@ -834,7 +884,7 @@ export default function App() {
                         <div className="glass-card p-5 border-l-4 border-l-blue-600 flex flex-col justify-center relative overflow-hidden group">
                             <div className="absolute right-0 top-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl -mr-8 -mt-8"></div>
                             <div className="flex justify-between items-center mb-2 z-10">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Run Rate Cierre</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Proyección de Cierre</p>
                                 <i className="ph-fill ph-chart-line-up text-blue-600 text-lg"></i>
                             </div>
                             <span className="text-2xl font-black text-slate-900 mb-2 z-10"><AnimatedCounter value={daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0} prefix="$" /></span>
@@ -855,7 +905,7 @@ export default function App() {
                                 <div className="bg-slate-800 h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (Math.max(0, goalMonthCC - totalSales) / goalMonthCC) * 100)}%` }}></div>
                             </div>
                              <div className="mt-2 text-[10px] font-bold text-slate-500 text-right">
-                                Restan <span className="text-slate-800">{daysTotal - daysElapsed}</span> días hábiles
+                                Faltan <span className="text-slate-800">{daysTotal - daysElapsed}</span> días hábiles
                             </div>
                         </div>
                     </div>
@@ -902,7 +952,7 @@ export default function App() {
                         <div className="w-full text-center mb-4 relative z-10">
                             <h3 className="font-extrabold text-slate-800 flex items-center justify-center gap-2 text-sm">
                                 <i className="ph-fill ph-chart-pie-slice text-amber-500 text-lg"></i>
-                                Market Share
+                                Cuota de Mercado
                             </h3>
                         </div>
                         
@@ -964,7 +1014,7 @@ export default function App() {
                         </div>
                     </div>
                   </div>
-                  <div className="h-56 w-full relative"><canvas ref={lineChartRef}></canvas></div>
+                  <div className="h-64 w-full relative"><canvas ref={lineChartRef}></canvas></div>
               </section>
 
               {/* Secciones Finales */}
@@ -1010,13 +1060,13 @@ export default function App() {
                                   </div>
                                   <div>
                                      <span className="font-bold text-slate-700 block">{agent.name}</span>
-                                     <span className="text-[10px] text-slate-400 font-bold uppercase">Rank #{index+1}</span>
+                                     <span className="text-[10px] text-slate-400 font-bold uppercase">Puesto #{index+1}</span>
                                   </div>
                                 </div>
                               </td>
                               <td className="px-4 py-4 text-right font-black text-slate-800 text-base">{formatCurrency(agent.sales)}</td>
                               <td className={`px-4 py-4 text-right font-bold ${agent.diff >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                {agent.diff >= 0 ? '+' : ''}{Math.round(agent.diff).toLocaleString('en-US')}
+                                {agent.diff >= 0 ? '+' : ''}{Math.round(agent.diff).toLocaleString('es-PA')}
                               </td>
                               <td className="px-4 py-4">
                                 <div className="flex flex-col items-center gap-1">
@@ -1029,7 +1079,7 @@ export default function App() {
                               <td className="px-4 py-4 text-center">
                                 <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${isAhead ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
                                   <i className={`ph-fill ${isAhead ? 'ph-check-circle' : 'ph-warning-circle'}`}></i>
-                                  {isAhead ? 'On Track' : 'Off Track'}
+                                  {isAhead ? 'En Meta' : 'Fuera de Meta'}
                                 </span>
                               </td>
                             </tr>
@@ -1047,7 +1097,7 @@ export default function App() {
                     <div className="glass-card overflow-hidden border-t-4 border-t-emerald-500">
                         <div className="p-4 border-b border-slate-100 bg-emerald-50/30 flex justify-between items-center">
                              <h3 className="font-bold text-emerald-900 flex items-center gap-2 text-sm uppercase tracking-wide">
-                                <i className="ph-fill ph-trophy text-emerald-500 text-lg"></i> Top Sellers (L2)
+                                <i className="ph-fill ph-trophy text-emerald-500 text-lg"></i> Top Ventas (N2)
                              </h3>
                         </div>
                         <div className="p-2">
@@ -1068,7 +1118,7 @@ export default function App() {
                     <div className="glass-card overflow-hidden border-t-4 border-t-rose-500">
                         <div className="p-4 border-b border-slate-100 bg-rose-50/30 flex justify-between items-center">
                              <h3 className="font-bold text-rose-900 flex items-center gap-2 text-sm uppercase tracking-wide">
-                                <i className="ph-fill ph-trend-down text-rose-500 text-lg"></i> Low Volume (L2)
+                                <i className="ph-fill ph-trend-down text-rose-500 text-lg"></i> Bajo Volumen (N2)
                              </h3>
                         </div>
                         <div className="p-2">
