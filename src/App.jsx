@@ -30,66 +30,202 @@ try {
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// --- UTILIDADES DE FECHAS (PANAMÁ) ---
+// --- UTILIDADES ---
 const getHolidays = (year) => {
-  // Feriados fijos
   const fixedHolidays = [
-    `${year}-01-01`, // Año Nuevo
-    `${year}-01-09`, // Mártires
-    `${year}-05-01`, // Trabajo
-    `${year}-11-03`, // Separación Colombia
-    `${year}-11-04`, // Día de la Bandera (a veces puente, lo incluimos como feriado laboral común)
-    `${year}-11-05`, // Colón
-    `${year}-11-10`, // Grito de Los Santos
-    `${year}-11-28`, // Indep. España
-    `${year}-12-08`, // Día de la Madre
-    `${year}-12-25`, // Navidad
+    `${year}-01-01`, `${year}-01-09`, `${year}-05-01`, `${year}-11-03`,
+    `${year}-11-04`, `${year}-11-05`, `${year}-11-10`, `${year}-11-28`,
+    `${year}-12-08`, `${year}-12-25`,
   ];
-
-  // Cálculo aproximado de Semana Santa y Carnaval para 2024-2026 (Hardcoded para estabilidad)
   let variableHolidays = [];
   if (year === 2024) variableHolidays = ['2024-02-13', '2024-03-29'];
-  if (year === 2025) variableHolidays = ['2025-03-04', '2025-04-18']; // Carnaval 4 Mar, Viernes Santo 18 Abr
+  if (year === 2025) variableHolidays = ['2025-03-04', '2025-04-18'];
   if (year === 2026) variableHolidays = ['2026-02-17', '2026-04-03'];
-
   return [...fixedHolidays, ...variableHolidays];
 };
 
 const getPanamaBusinessDays = () => {
   const now = new Date();
   const year = now.getFullYear();
-  const month = now.getMonth(); // 0-indexed
+  const month = now.getMonth();
   const todayDate = now.getDate();
-  
   const holidays = getHolidays(year);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  
   let totalBusinessDays = 0;
   let elapsedBusinessDays = 0;
-
   for (let day = 1; day <= daysInMonth; day++) {
     const current = new Date(year, month, day);
-    const dayOfWeek = current.getDay(); // 0 = Domingo
+    const dayOfWeek = current.getDay();
     const dateString = current.toISOString().split('T')[0];
-    
-    // Excluir Domingo (0) y Feriados
     const isHoliday = holidays.includes(dateString);
     const isSunday = dayOfWeek === 0;
-
     if (!isSunday && !isHoliday) {
       totalBusinessDays++;
-      // Días transcurridos: hasta la fecha excluyendo hoy (ayer fue el último día completo)
-      if (day < todayDate) {
-        elapsedBusinessDays++;
-      }
+      if (day < todayDate) elapsedBusinessDays++;
     }
   }
-
   return { totalBusinessDays, elapsedBusinessDays };
 };
 
+const getInitials = (name) => {
+    if (!name) return '??';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
 
-// --- COMPONENTE DE NOTIFICACIÓN ---
+const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+    }).format(amount);
+};
+
+// --- COMPONENTES UI ANIMADOS ---
+
+const AnimatedCounter = ({ value, duration = 1500, prefix = '' }) => {
+    const [count, setCount] = useState(0);
+    
+    useEffect(() => {
+        let startTime;
+        let animationFrame;
+        
+        const animate = (timestamp) => {
+            if (!startTime) startTime = timestamp;
+            const progress = timestamp - startTime;
+            const percentage = Math.min(progress / duration, 1);
+            
+            // Easing function (easeOutExpo)
+            const ease = (x) => x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+            
+            setCount(Math.floor(value * ease(percentage)));
+            
+            if (progress < duration) {
+                animationFrame = requestAnimationFrame(animate);
+            } else {
+                setCount(value);
+            }
+        };
+        
+        animationFrame = requestAnimationFrame(animate);
+        return () => cancelAnimationFrame(animationFrame);
+    }, [value, duration]);
+
+    return (
+        <span>{prefix}{count.toLocaleString('en-US')}</span>
+    );
+};
+
+const CircularProgress = ({ value, max, color = "text-amber-500", size = 70, strokeWidth = 6 }) => {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+    const [offset, setOffset] = useState(circumference);
+    
+    useEffect(() => {
+        const progress = Math.min(Math.max(value / max, 0), 1);
+        const dashoffset = circumference - progress * circumference;
+        // Delay para animación
+        const timer = setTimeout(() => setOffset(dashoffset), 300);
+        return () => clearTimeout(timer);
+    }, [value, max, circumference]);
+
+    return (
+        <div className="relative flex items-center justify-center drop-shadow-md" style={{ width: size, height: size }}>
+            <svg width={size} height={size} className="transform -rotate-90">
+                <circle className="text-slate-200/50" strokeWidth={strokeWidth} stroke="currentColor" fill="transparent" r={radius} cx={size / 2} cy={size / 2} />
+                <circle 
+                    className={`${color} transition-all duration-[1500ms] ease-out`} 
+                    strokeWidth={strokeWidth} 
+                    strokeDasharray={circumference} 
+                    strokeDashoffset={offset} 
+                    strokeLinecap="round" 
+                    stroke="currentColor" 
+                    fill="transparent" 
+                    r={radius} 
+                    cx={size / 2} 
+                    cy={size / 2} 
+                />
+            </svg>
+            <div className="absolute text-[10px] font-black text-slate-700">
+                {Math.round((value / max) * 100)}%
+            </div>
+        </div>
+    );
+};
+
+const Podium = ({ agents }) => {
+    // Aseguramos tener al menos 3 espacios aunque sean vacíos para mantener estructura
+    const top3 = [
+        agents[1] || { name: 'Vacante', sales: 0 }, // 2nd place (Left)
+        agents[0] || { name: 'Vacante', sales: 0 }, // 1st place (Center)
+        agents[2] || { name: 'Vacante', sales: 0 }  // 3rd place (Right)
+    ];
+
+    const maxSales = Math.max(...top3.map(a => a.sales), 1); // Evitar div por 0
+
+    return (
+        <div className="flex items-end justify-center gap-2 md:gap-4 h-64 w-full pt-8 pb-0">
+            {top3.map((agent, index) => {
+                // Orden visual: 2nd, 1st, 3rd. Index 0 es 2nd place en array visual, Index 1 es 1st...
+                let rank = 0;
+                let heightPercent = 0;
+                let colorClass = '';
+                let icon = '';
+                let delay = '';
+
+                if (index === 1) { // 1st Place (Center)
+                    rank = 1;
+                    heightPercent = 100; // Full height relative to container
+                    colorClass = 'from-amber-300 to-amber-500 shadow-amber-500/50';
+                    icon = 'ph-crown';
+                    delay = 'delay-300';
+                } else if (index === 0) { // 2nd Place (Left)
+                    rank = 2;
+                    heightPercent = 75; // Visual height
+                    colorClass = 'from-slate-300 to-slate-400 shadow-slate-400/50';
+                    icon = 'ph-medal';
+                    delay = 'delay-500';
+                } else { // 3rd Place (Right)
+                    rank = 3;
+                    heightPercent = 60; // Visual height
+                    colorClass = 'from-orange-300 to-orange-400 shadow-orange-400/50';
+                    icon = 'ph-medal';
+                    delay = 'delay-700';
+                }
+                
+                // Calculamos altura basada en ventas reales vs el 1ero, pero con un mínimo visual
+                const realHeightPct = (agent.sales / maxSales) * 100;
+                const visualHeight = index === 1 ? 'h-[90%]' : (index === 0 ? 'h-[75%]' : 'h-[60%]');
+
+                return (
+                    <div key={index} className={`flex flex-col items-center justify-end w-24 md:w-32 group ${visualHeight}`}>
+                        
+                        {/* Avatar & Info Flotante */}
+                        <div className={`mb-2 flex flex-col items-center transition-all duration-700 opacity-0 animate-fade-in-down ${delay} fill-mode-forwards`}>
+                            <div className="font-bold text-slate-700 text-xs md:text-sm text-center line-clamp-1 mb-1">{agent.name.split(' ')[0]}</div>
+                            <div className="font-black text-slate-900 text-sm md:text-base"><AnimatedCounter value={agent.sales} prefix="$" /></div>
+                        </div>
+
+                        {/* Barra */}
+                        <div className={`w-full h-full rounded-t-2xl bg-gradient-to-t ${colorClass} shadow-lg relative flex items-end justify-center pb-4 transition-all duration-1000 transform scale-y-0 animate-grow-up origin-bottom`}>
+                             {/* Badge de Rango */}
+                             <div className="absolute -top-4 w-8 h-8 md:w-10 md:h-10 rounded-full bg-white border-4 border-slate-50 shadow-md flex items-center justify-center z-10">
+                                <span className={`font-black ${index === 1 ? 'text-amber-500' : (index === 0 ? 'text-slate-500' : 'text-orange-500')}`}>#{rank}</span>
+                             </div>
+                             
+                             {/* Icono decorativo fondo */}
+                             <i className={`ph-fill ${icon} text-white/30 text-4xl absolute bottom-2`}></i>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+
 const Notification = ({ message, type, onClose }) => {
   if (!message) return null;
   const isError = type === 'error';
@@ -102,7 +238,6 @@ const Notification = ({ message, type, onClose }) => {
   );
 };
 
-// --- COMPONENTE DE MODAL DE CONFIRMACIÓN ---
 const ConfirmModal = ({ isOpen, onCancel, onConfirm, title, message }) => {
   if (!isOpen) return null;
   return (
@@ -115,19 +250,14 @@ const ConfirmModal = ({ isOpen, onCancel, onConfirm, title, message }) => {
         <h3 className="text-xl font-bold text-slate-900 mb-2">{title}</h3>
         <p className="text-slate-600 text-sm mb-6 leading-relaxed">{message}</p>
         <div className="flex gap-3 justify-end">
-          <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold rounded-lg text-sm transition-colors">
-            Cancelar
-          </button>
-          <button onClick={onConfirm} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm shadow-lg shadow-amber-500/20 transition-all">
-            Sí, reemplazar datos
-          </button>
+          <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold rounded-lg text-sm transition-colors">Cancelar</button>
+          <button onClick={onConfirm} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm shadow-lg shadow-amber-500/20 transition-all">Sí, reemplazar</button>
         </div>
       </div>
     </div>
   );
 };
 
-// --- COMPONENTE DE LOGIN ---
 const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -152,7 +282,6 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
       <div className="absolute inset-0 bg-gradient-to-br from-slate-900 to-slate-800 z-0"></div>
       <div className="absolute top-[-10%] right-[-5%] w-96 h-96 bg-amber-500/20 rounded-full blur-3xl animate-pulse"></div>
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl"></div>
-
       <div className="glass-card w-full max-w-md p-8 relative z-10 bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-slate-900 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-black/20">
@@ -161,115 +290,27 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
           <h1 className="text-2xl font-bold text-white mb-1">Bienvenido</h1>
           <p className="text-slate-400 text-sm">Executive Dashboard Access</p>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="p-3 bg-rose-500/20 border border-rose-500/50 rounded-lg text-rose-200 text-xs text-center">
-              {error}
-            </div>
-          )}
-          
+          {error && <div className="p-3 bg-rose-500/20 border border-rose-500/50 rounded-lg text-rose-200 text-xs text-center">{error}</div>}
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-300 uppercase ml-1">Email Corporativo</label>
-            <div className="relative">
-              <i className="ph-duotone ph-envelope absolute left-3 top-3 text-slate-400"></i>
-              <input 
-                type="email" 
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-600"
-                placeholder="ejemplo@empresa.com"
-              />
-            </div>
+            <label className="text-xs font-bold text-slate-300 uppercase ml-1">Email</label>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl py-2.5 px-4 focus:outline-none focus:border-amber-500" placeholder="user@company.com" />
           </div>
-
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-300 uppercase ml-1">Contraseña</label>
-            <div className="relative">
-              <i className="ph-duotone ph-lock-key absolute left-3 top-3 text-slate-400"></i>
-              <input 
-                type="password" 
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-600"
-                placeholder="••••••••"
-              />
-            </div>
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl py-2.5 px-4 focus:outline-none focus:border-amber-500" placeholder="••••••••" />
           </div>
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-amber-500/25 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
-          >
-            {loading ? <i className="ph ph-spinner animate-spin"></i> : <i className="ph-bold ph-sign-in"></i>}
-            {isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
-          </button>
+          <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-lg transition-all">{loading ? '...' : (isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión')}</button>
         </form>
-
         <div className="mt-6 pt-6 border-t border-white/10 flex flex-col gap-4">
-           <button 
-            onClick={onLoginGuest}
-            className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-slate-300 text-sm font-medium transition-all flex items-center justify-center gap-2 group"
-          >
-            <i className="ph-duotone ph-user-circle text-lg group-hover:text-white"></i>
-            Acceso Invitado (Demo)
-          </button>
-          
-          <button 
-            onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
-            className="text-xs text-slate-500 hover:text-amber-400 transition-colors text-center"
-          >
-            {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿Nuevo usuario? Regístrate aquí'}
-          </button>
+           <button onClick={onLoginGuest} className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-slate-300 text-sm transition-all flex items-center justify-center gap-2">Acceso Invitado</button>
+           <button onClick={() => { setIsRegistering(!isRegistering); setError(''); }} className="text-xs text-slate-500 hover:text-amber-400 text-center">{isRegistering ? 'Iniciar sesión' : 'Registrarse'}</button>
         </div>
       </div>
     </div>
   );
 };
 
-// --- COMPONENTE CIRCULAR PROGRESS ---
-const CircularProgress = ({ value, max, color = "text-amber-500", size = 60, strokeWidth = 5 }) => {
-    const radius = (size - strokeWidth) / 2;
-    const circumference = radius * 2 * Math.PI;
-    const progress = Math.min(Math.max(value / max, 0), 1);
-    const dashoffset = circumference - progress * circumference;
-
-    return (
-        <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-            <svg width={size} height={size} className="transform -rotate-90">
-                <circle
-                    className="text-slate-200"
-                    strokeWidth={strokeWidth}
-                    stroke="currentColor"
-                    fill="transparent"
-                    r={radius}
-                    cx={size / 2}
-                    cy={size / 2}
-                />
-                <circle
-                    className={`${color} transition-all duration-1000 ease-out`}
-                    strokeWidth={strokeWidth}
-                    strokeDasharray={circumference}
-                    strokeDashoffset={dashoffset}
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="transparent"
-                    r={radius}
-                    cx={size / 2}
-                    cy={size / 2}
-                />
-            </svg>
-            <div className="absolute text-xs font-bold text-slate-700">
-                {Math.round(progress * 100)}%
-            </div>
-        </div>
-    );
-};
-
-// --- COMPONENTE PRINCIPAL ---
 export default function App() {
   const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [], categories: [] });
   const [user, setUser] = useState(null);
@@ -280,6 +321,9 @@ export default function App() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
   const [notification, setNotification] = useState(null);
+  
+  // Estado para market share interactivo
+  const [hoveredAgent, setHoveredAgent] = useState(null);
 
   const pieChartRef = useRef(null);
   const barChartRef = useRef(null);
@@ -289,7 +333,6 @@ export default function App() {
   const lineInstance = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Estados para fechas calculadas
   const [businessDays, setBusinessDays] = useState({ total: 25, elapsed: 10 });
 
   const showNotification = (msg, type = 'success') => {
@@ -302,10 +345,8 @@ export default function App() {
       setUser(u);
       setLoading(false);
     });
-    // Calcular días laborales al montar
     const days = getPanamaBusinessDays();
     setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
-    
     return () => unsubscribe();
   }, []);
 
@@ -318,8 +359,7 @@ export default function App() {
         await signInAnonymously(auth);
       }
     } catch (error) {
-      console.error("Auth error:", error);
-      showNotification("Error al iniciar como invitado: " + error.message, 'error');
+      showNotification("Error: " + error.message, 'error');
       setLoading(false);
     }
   };
@@ -336,21 +376,16 @@ export default function App() {
     try {
       await signOut(auth);
       setMetrics({ agents: [], annual: [], daily: [], categories: [] });
-    } catch (error) {
-      console.error("Error signing out: ", error);
-    }
+    } catch (error) { console.error(error); }
   };
 
   useEffect(() => {
     if (!user) return;
-    
     setDataLoading(true);
     const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
-
     const unsubscribe = onSnapshot(dataRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Recuperar estructura completa
         setMetrics({
             agents: data.agents || [],
             annual: data.annual || [],
@@ -361,11 +396,7 @@ export default function App() {
         setMetrics({ agents: [], annual: [], daily: [], categories: [] });
       }
       setDataLoading(false);
-    }, (error) => {
-      console.error("Firestore error:", error);
-      setDataLoading(false);
-    });
-
+    }, (error) => setDataLoading(false));
     return () => unsubscribe();
   }, [user]);
 
@@ -375,18 +406,18 @@ export default function App() {
       tailwind.config = {
         theme: {
           extend: {
-            colors: {
-              navy: { 800: '#1e3a8a', 900: '#0f172a' },
-              amber: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
-            },
+            colors: { navy: { 800: '#1e3a8a', 900: '#0f172a' }, amber: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' } },
             animation: {
               'fade-in': 'fadeIn 0.5s ease-out',
-              'fade-in-down': 'fadeInDown 0.5s ease-out',
+              'fade-in-down': 'fadeInDown 0.6s ease-out',
+              'grow-up': 'growUp 1s ease-out forwards',
               'scale-in': 'scaleIn 0.3s ease-out',
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             },
             keyframes: {
               fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
-              fadeInDown: { '0%': { opacity: '0', transform: 'translateY(-10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+              fadeInDown: { '0%': { opacity: '0', transform: 'translateY(-20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+              growUp: { '0%': { transform: 'scaleY(0)' }, '100%': { transform: 'scaleY(1)' } },
               scaleIn: { '0%': { opacity: '0', transform: 'scale(0.95)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
             }
           }
@@ -394,27 +425,17 @@ export default function App() {
       }
     `;
     document.head.appendChild(tailwindConfigScript);
-
-    const loadScript = (src) => {
-      return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) {
-          resolve(); return;
-        }
+    const loadScript = (src) => new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
         const script = document.createElement('script');
-        script.src = src;
-        script.onload = resolve;
-        script.onerror = reject;
+        script.src = src; script.onload = resolve; script.onerror = reject;
         document.head.appendChild(script);
-      });
-    };
-
+    });
     Promise.all([
       loadScript("https://cdn.jsdelivr.net/npm/chart.js"),
       loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"),
       loadScript("https://unpkg.com/@phosphor-icons/web")
-    ]).then(() => {
-      updateCharts();
-    });
+    ]).then(() => updateCharts());
   }, []);
 
   useEffect(() => {
@@ -424,7 +445,6 @@ export default function App() {
 
   const updateCharts = () => {
     if (typeof Chart === 'undefined') return;
-    // Si no hay datos anuales, asumimos que no hay datos cargados válidos aún
     if (metrics.annual.length === 0) return;
 
     Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
@@ -432,7 +452,7 @@ export default function App() {
 
     const processedAgents = [...metrics.agents].sort((a, b) => b.sales - a.sales);
     
-    // --- PIE CHART (Agentes Top) - MAS DINAMICO ---
+    // --- PIE CHART ---
     if (pieChartRef.current) {
       if (pieInstance.current) pieInstance.current.destroy();
       const ctxPie = pieChartRef.current.getContext('2d');
@@ -445,74 +465,49 @@ export default function App() {
             backgroundColor: ['#0f172a', '#f59e0b', '#334155', '#fbbf24', '#94a3b8'],
             borderWidth: 2,
             borderColor: '#ffffff',
-            hoverOffset: 20, // Más desplazamiento al hover
-            borderRadius: 5, // Bordes redondeados en los segmentos
+            hoverOffset: 15,
+            borderRadius: 6,
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          cutout: '75%', // Más fino para look moderno
-          animation: {
-            animateScale: true,
-            animateRotate: true
+          cutout: '80%',
+          layout: { padding: 10 },
+          onHover: (event, elements) => {
+             if (elements && elements.length > 0) {
+                 const index = elements[0].index;
+                 setHoveredAgent({
+                     name: processedAgents[index].name.split(' ')[0],
+                     sales: processedAgents[index].sales
+                 });
+             } else {
+                 setHoveredAgent(null);
+             }
           },
           plugins: { 
               legend: { display: false },
-              tooltip: {
-                  backgroundColor: '#0f172a',
-                  padding: 12,
-                  cornerRadius: 8,
-                  callbacks: {
-                      label: function(context) {
-                          const label = context.label || '';
-                          const value = context.raw || 0;
-                          const total = context.chart._metasets[context.datasetIndex].total;
-                          const percentage = ((value / total) * 100).toFixed(1) + '%';
-                          return `${label}: ${percentage}`;
-                      }
-                  }
-              }
+              tooltip: { enabled: false } // Desactivamos tooltip nativo para usar centro dinámico
           }
         }
       });
     }
 
-    // --- BAR CHART (EVOLUCIÓN ANUAL REAL) ---
+    // --- BAR CHART ---
     if (barChartRef.current) {
       if (barInstance.current) barInstance.current.destroy();
-      
       const sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
       const displayYears = sortedYears.slice(-3);
-
-      const growthLabelPlugin = {
-        id: 'growthLabel',
-        afterDatasetsDraw(chart) {
-          const { ctx } = chart;
-          chart.data.datasets.forEach((dataset, datasetIndex) => {
-            const meta = chart.getDatasetMeta(datasetIndex);
-            meta.data.forEach((element, index) => {
-              if (index > 0) {
-                const currentVal = dataset.data[index];
-                const prevVal = dataset.data[index - 1];
-                let growth = 0;
-                if (prevVal !== 0) growth = ((currentVal - prevVal) / prevVal) * 100;
-                const x = element.x;
-                const y = element.y;
-                ctx.save();
-                ctx.textAlign = 'center';
-                ctx.font = 'bold 11px "Plus Jakarta Sans"';
-                const text = (growth >= 0 ? '+' : '') + growth.toFixed(1) + '%';
-                ctx.fillStyle = growth >= 0 ? '#059669' : '#e11d48';
-                ctx.fillText(text, x, y - 8);
-                ctx.restore();
-              }
-            });
-          });
-        }
-      };
-
       const ctxBar = barChartRef.current.getContext('2d');
+      
+      const gradientCurrent = ctxBar.createLinearGradient(0, 0, 0, 300);
+      gradientCurrent.addColorStop(0, '#f59e0b');
+      gradientCurrent.addColorStop(1, '#d97706');
+
+      const gradientPast = ctxBar.createLinearGradient(0, 0, 0, 300);
+      gradientPast.addColorStop(0, '#1e293b');
+      gradientPast.addColorStop(1, '#0f172a');
+
       barInstance.current = new Chart(ctxBar, {
         type: 'bar',
         data: {
@@ -520,65 +515,37 @@ export default function App() {
           datasets: [{
             label: 'Ventas Totales',
             data: displayYears.map(y => y.total),
-            backgroundColor: (ctx) => {
-                const index = ctx.dataIndex;
-                const isLast = index === displayYears.length - 1;
-                return isLast ? '#f59e0b' : '#0f172a';
-            },
-            borderRadius: 6,
-            barPercentage: 0.6,
-            categoryPercentage: 0.8
+            backgroundColor: (ctx) => (ctx.dataIndex === displayYears.length - 1 ? gradientCurrent : gradientPast),
+            borderRadius: 8,
+            barPercentage: 0.5,
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            y: { beginAtZero: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { callback: v => '$' + v/1000 + 'k', color: '#94a3b8', font: {size: 10} }, border: { display: false } },
-            x: { grid: { display: false }, ticks: { color: '#64748b', font: {weight: 'bold'} } }
+            y: { beginAtZero: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { callback: v => '$' + v/1000 + 'k', font: {size: 10} }, border: { display: false } },
+            x: { grid: { display: false }, ticks: { font: {weight: 'bold'} } }
           },
-          plugins: {
-            legend: { display: false }, 
-            tooltip: { backgroundColor: '#0f172a', padding: 12, titleFont: { size: 13 }, bodyFont: { size: 12 }, cornerRadius: 8, displayColors: false }
-          }
-        },
-        plugins: [growthLabelPlugin]
+          plugins: { legend: { display: false } }
+        }
       });
     }
 
-    // --- LINE CHART (TENDENCIA DIARIA REAL) ---
+    // --- LINE CHART ---
     if (lineChartRef.current) {
         if (lineInstance.current) lineInstance.current.destroy();
-        
         const dailyDataPoints = metrics.daily; 
         const labels = dailyDataPoints.map(d => {
             const date = new Date(d.date); 
             return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
         });
         const dataValues = dailyDataPoints.map(d => d.total);
-
         const ctxLine = lineChartRef.current.getContext('2d');
         
-        const verticalLinePlugin = {
-            id: 'verticalLine',
-            afterDraw: (chart) => {
-                if (chart.tooltip?._active?.length) {
-                    const ctx = chart.ctx;
-                    const x = chart.tooltip._active[0].element.x;
-                    const topY = chart.scales.y.top;
-                    const bottomY = chart.scales.y.bottom;
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.moveTo(x, topY);
-                    ctx.lineTo(x, bottomY);
-                    ctx.lineWidth = 1;
-                    ctx.strokeStyle = '#e2e8f0';
-                    ctx.setLineDash([5, 5]);
-                    ctx.stroke();
-                    ctx.restore();
-                }
-            }
-        };
+        const gradient = ctxLine.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, 'rgba(245, 158, 11, 0.4)');
+        gradient.addColorStop(1, 'rgba(245, 158, 11, 0)');
 
         lineInstance.current = new Chart(ctxLine, {
             type: 'line',
@@ -588,76 +555,26 @@ export default function App() {
                     label: 'Ventas Diarias',
                     data: dataValues,
                     borderColor: '#f59e0b',
-                    backgroundColor: (context) => {
-                        const ctx = context.chart.ctx;
-                        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-                        gradient.addColorStop(0, 'rgba(245, 158, 11, 0.2)');
-                        gradient.addColorStop(1, 'rgba(245, 158, 11, 0)');
-                        return gradient;
-                    },
-                    borderWidth: 2,
-                    pointRadius: 2,
+                    backgroundColor: gradient,
+                    borderWidth: 3,
+                    pointRadius: 0,
                     pointHoverRadius: 6,
                     pointBackgroundColor: '#fff',
                     pointBorderColor: '#f59e0b',
-                    pointBorderWidth: 2,
                     fill: true,
-                    tension: 0.3
+                    tension: 0.4
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
+                interaction: { mode: 'index', intersect: false },
                 scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: '#f1f5f9', drawBorder: false },
-                        ticks: { callback: v => '$' + v.toLocaleString(), color: '#94a3b8', font: {size: 10} },
-                        border: { display: false }
-                    },
-                    x: {
-                        grid: { display: false },
-                        ticks: { display: false } 
-                    }
+                    y: { beginAtZero: true, display: false },
+                    x: { grid: { display: false }, ticks: { display: false } }
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: '#0f172a',
-                        padding: 12,
-                        titleFont: { size: 13 },
-                        bodyFont: { size: 12 },
-                        cornerRadius: 8,
-                        displayColors: false,
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.y !== null) {
-                                    label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
-                                }
-                                return label;
-                            },
-                             // Opcional: Mostrar mejor vendedor en tooltip si se desea
-                             // afterBody: (tooltipItems) => {
-                             //    const index = tooltipItems[0].dataIndex;
-                             //    const dayData = metrics.daily[index];
-                             //    if (dayData && dayData.bestAgent) {
-                             //        return `🏆 ${dayData.bestAgent.name}: $${dayData.bestAgent.sales.toLocaleString()}`;
-                             //    }
-                             //    return '';
-                             // }
-                        }
-                    }
-                }
-            },
-            plugins: [verticalLinePlugin]
+                plugins: { legend: { display: false } }
+            }
         });
     }
   };
@@ -665,7 +582,6 @@ export default function App() {
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     if (metrics.agents.length > 0) {
       setPendingFile(file);
       setShowConfirmModal(true);
@@ -677,13 +593,8 @@ export default function App() {
   };
 
   const processFile = (file) => {
-    if (typeof XLSX === 'undefined') {
-        showNotification("La librería Excel no se ha cargado aún. Intenta de nuevo.", 'error');
-        return;
-    }
-
+    if (typeof XLSX === 'undefined') { showNotification("Librería Excel no lista", 'error'); return; }
     setIsUploading(true);
-
     const reader = new FileReader();
     reader.onload = async function(e) {
       try {
@@ -698,97 +609,81 @@ export default function App() {
         if (headers && Array.isArray(headers)) {
           headers.forEach((h, idx) => {
             const txt = String(h).toLowerCase();
-            if (colIndices.name === -1 && (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente') || txt.includes('vendedor'))) colIndices.name = idx;
-            if (colIndices.sales === -1 && (txt.includes('venta') || txt.includes('total') || txt.includes('monto') || txt.includes('sales') || txt.includes('importe'))) colIndices.sales = idx;
-            if (colIndices.date === -1 && (txt.includes('fecha') || txt.includes('date') || txt.includes('dia') || txt.includes('time'))) colIndices.date = idx;
-            if (colIndices.category === -1 && (txt.includes('categoria') || txt.includes('category') || txt.includes('producto') || txt.includes('l2'))) colIndices.category = idx;
-            if (colIndices.quantity === -1 && (txt.includes('cantidad') || txt.includes('quantity') || txt.includes('cant') || txt.includes('unidades'))) colIndices.quantity = idx;
+            if (colIndices.name === -1 && (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente'))) colIndices.name = idx;
+            if (colIndices.sales === -1 && (txt.includes('venta') || txt.includes('total') || txt.includes('monto'))) colIndices.sales = idx;
+            if (colIndices.date === -1 && (txt.includes('fecha') || txt.includes('date'))) colIndices.date = idx;
+            if (colIndices.category === -1 && (txt.includes('categoria') || txt.includes('category'))) colIndices.category = idx;
+            if (colIndices.quantity === -1 && (txt.includes('cantidad') || txt.includes('cant'))) colIndices.quantity = idx;
           });
         }
-
-        if (colIndices.name === -1 || colIndices.sales === -1 || colIndices.date === -1) {
-             throw new Error("No se encontraron columnas requeridas (Nombre, Venta, Fecha). Revise los encabezados.");
-        }
+        if (colIndices.name === -1 || colIndices.sales === -1 || colIndices.date === -1) throw new Error("Faltan columnas requeridas");
 
         const annualMap = new Map();
         const dailyMap = new Map();
         const agentsMap = new Map();
         const categoryMap = new Map();
-        const dailyAgentSalesMap = new Map(); // Para rastrear mejor vendedor por día
+        const dailyAgentSalesMap = new Map();
         
         let maxYear = 0;
-
         for(let i = 1; i < jsonData.length; i++) {
              const row = jsonData[i];
              if (!row) continue;
              const rawDate = row[colIndices.date];
              if (rawDate) {
                  const dateObj = new Date(rawDate);
-                 if (!isNaN(dateObj.getTime())) {
-                     if (dateObj.getFullYear() > maxYear) maxYear = dateObj.getFullYear();
-                 }
+                 if (!isNaN(dateObj.getTime())) if (dateObj.getFullYear() > maxYear) maxYear = dateObj.getFullYear();
              }
         }
-        
         if (maxYear === 0) maxYear = new Date().getFullYear();
 
         for(let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i];
           if (!row || !row[colIndices.name]) continue;
           
-          const rawSales = row[colIndices.sales];
           let salesVal = 0;
-          if (typeof rawSales === 'number') {
-             salesVal = rawSales;
-          } else if (typeof rawSales === 'string') {
-             salesVal = parseFloat(rawSales.replace(/[^0-9.-]+/g,"")) || 0;
-          }
+          const rawSales = row[colIndices.sales];
+          if (typeof rawSales === 'number') salesVal = rawSales;
+          else if (typeof rawSales === 'string') salesVal = parseFloat(rawSales.replace(/[^0-9.-]+/g,"")) || 0;
 
           const rawDate = row[colIndices.date];
           let dateObj = null;
           if (rawDate instanceof Date) dateObj = rawDate;
           else if (typeof rawDate === 'string') dateObj = new Date(rawDate);
-          
           if (!dateObj || isNaN(dateObj.getTime())) continue;
 
           const year = dateObj.getFullYear();
           const dateStr = dateObj.toISOString().split('T')[0]; 
-
           annualMap.set(year, (annualMap.get(year) || 0) + salesVal);
 
           if (year === maxYear) {
               dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + salesVal);
-
               const rawName = String(row[colIndices.name]).trim();
               const nameKey = rawName.toLowerCase();
+              
               if (agentsMap.has(nameKey)) {
-                const existingAgent = agentsMap.get(nameKey);
-                existingAgent.sales += salesVal;
-                agentsMap.set(nameKey, existingAgent);
+                const existing = agentsMap.get(nameKey);
+                existing.sales += salesVal;
+                agentsMap.set(nameKey, existing);
               } else {
                 agentsMap.set(nameKey, { name: rawName, sales: salesVal });
               }
-
-              // Rastrear ventas por agente por día
+              
               if (!dailyAgentSalesMap.has(dateStr)) dailyAgentSalesMap.set(dateStr, new Map());
               const dayAgentMap = dailyAgentSalesMap.get(dateStr);
               dayAgentMap.set(nameKey, (dayAgentMap.get(nameKey) || 0) + salesVal);
 
               if (colIndices.category !== -1) {
                   const rawCat = String(row[colIndices.category] || "Sin Categoría").trim();
-                  const rawQty = row[colIndices.quantity];
                   let qtyVal = 0;
-                   if (typeof rawQty === 'number') {
-                     qtyVal = rawQty;
-                  } else if (typeof rawQty === 'string') {
-                     qtyVal = parseFloat(rawQty.replace(/[^0-9.-]+/g,"")) || 0;
-                  }
+                  const rawQty = row[colIndices.quantity];
+                  if (typeof rawQty === 'number') qtyVal = rawQty;
+                  else if (typeof rawQty === 'string') qtyVal = parseFloat(rawQty.replace(/[^0-9.-]+/g,"")) || 0;
 
                   if (categoryMap.has(rawCat)) {
-                      const existingCat = categoryMap.get(rawCat);
-                      existingCat.sales += salesVal;
-                      existingCat.quantity += qtyVal;
-                      categoryMap.set(rawCat, existingCat);
+                      const existing = categoryMap.get(rawCat);
+                      existing.sales += salesVal;
+                      existing.quantity += qtyVal;
+                      categoryMap.set(rawCat, existing);
                   } else {
                       categoryMap.set(rawCat, { name: rawCat, sales: salesVal, quantity: qtyVal });
                   }
@@ -799,17 +694,13 @@ export default function App() {
         const annualArray = Array.from(annualMap, ([year, total]) => ({ year, total }));
         const agentsArray = Array.from(agentsMap.values());
         const categoriesArray = Array.from(categoryMap.values());
-        
         let dailyArray = [];
         if (dailyMap.size > 0) {
             const sortedDates = Array.from(dailyMap.keys()).sort();
             const startDate = new Date(sortedDates[0]);
             const endDate = new Date(sortedDates[sortedDates.length - 1]);
-            
             for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
                 const dStr = d.toISOString().split('T')[0];
-                
-                // Encontrar mejor vendedor del día
                 let bestAgentInfo = { name: '-', sales: 0 };
                 if (dailyAgentSalesMap.has(dStr)) {
                     const dayAgentMap = dailyAgentSalesMap.get(dStr);
@@ -817,192 +708,82 @@ export default function App() {
                     for (const [agentKey, val] of dayAgentMap.entries()) {
                         if (val > maxSales) {
                             maxSales = val;
-                            // Usar nombre bonito del mapa global de agentes
                             const prettyName = agentsMap.get(agentKey)?.name || agentKey;
                             bestAgentInfo = { name: prettyName, sales: val };
                         }
                     }
                 }
-
-                dailyArray.push({
-                    date: dStr,
-                    total: dailyMap.get(dStr) || 0,
-                    bestAgent: bestAgentInfo
-                });
+                dailyArray.push({ date: dStr, total: dailyMap.get(dStr) || 0, bestAgent: bestAgentInfo });
             }
         }
 
-        if(annualArray.length > 0) {
-          if (user) {
-            const payload = {
-                agents: agentsArray,
-                annual: annualArray,
-                daily: dailyArray,
-                categories: categoriesArray
-            };
-            const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
-            await setDoc(dataRef, payload);
-            showNotification(`✅ Datos actualizados. Año base: ${maxYear}`);
-          } else {
-            showNotification("⚠️ No hay sesión activa. Recarga la página.", 'error');
-          }
-        } else {
-          showNotification("⚠️ El archivo no contiene datos válidos.", 'error');
+        if(annualArray.length > 0 && user) {
+            const payload = { agents: agentsArray, annual: annualArray, daily: dailyArray, categories: categoriesArray };
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period'), payload);
+            showNotification(`✅ Datos actualizados. Año: ${maxYear}`);
         }
-      } catch (err) {
-        console.error(err);
-        showNotification("❌ Error: " + err.message, 'error');
-      } finally {
-        setIsUploading(false);
-        setPendingFile(null);
-      }
+      } catch (err) { showNotification("Error: " + err.message, 'error'); } 
+      finally { setIsUploading(false); setPendingFile(null); }
     };
-    
-    reader.onerror = () => {
-        showNotification("Error de lectura de archivo", 'error');
-        setIsUploading(false);
-    };
-    
     reader.readAsArrayBuffer(file);
   };
 
-  const confirmReplace = () => {
-    setShowConfirmModal(false);
-    if (pendingFile) {
-      processFile(pendingFile);
-    }
-  };
+  const confirmReplace = () => { setShowConfirmModal(false); if (pendingFile) processFile(pendingFile); };
+  const cancelReplace = () => { setShowConfirmModal(false); setPendingFile(null); };
 
-  const cancelReplace = () => {
-    setShowConfirmModal(false);
-    setPendingFile(null);
-  };
-
-  // --- CÁLCULOS KPI GLOBALES ---
+  // KPI Calculations
   const { total: daysTotal, elapsed: daysElapsed } = businessDays;
   const goalMonthAgent = 15000;
   const goalDailyAgent = daysTotal > 0 ? goalMonthAgent / daysTotal : 0;
-  const agentsCountForGoal = 3; 
-  const goalMonthCC = goalMonthAgent * agentsCountForGoal; 
-  const goalDailyCC = goalDailyAgent * agentsCountForGoal; 
-
+  const goalMonthCC = goalMonthAgent * 3; 
+  const goalDailyCC = goalDailyAgent * 3; 
   const paceRatio = daysTotal > 0 ? (daysElapsed / daysTotal) : 0;
   const targetPercentToday = 1 - paceRatio; 
-
-  const processedAgents = metrics.agents.map(agent => {
-    const percent = agent.sales / goalMonthAgent;
-    return { ...agent, goal: goalMonthAgent, diff: agent.sales - goalMonthAgent, percent: percent };
-  }).sort((a, b) => b.sales - a.sales);
-
+  const processedAgents = metrics.agents.map(a => ({ ...a, diff: a.sales - goalMonthAgent, percent: a.sales / goalMonthAgent })).sort((a, b) => b.sales - a.sales);
   const totalSales = processedAgents.reduce((acc, curr) => acc + curr.sales, 0);
   const goalCCToday = goalDailyCC * daysElapsed;
   const isCCAhead = totalSales >= goalCCToday;
-  
-  const sortedCategories = [...metrics.categories].sort((a, b) => b.sales - a.sales);
-  const top3Categories = sortedCategories.slice(0, 3);
-  const bottom3Categories = [...metrics.categories]
-    .filter(c => c.sales > 0) 
-    .sort((a, b) => a.sales - b.sales)
-    .slice(0, 3);
+  const top3Categories = [...metrics.categories].sort((a, b) => b.sales - a.sales).slice(0, 3);
+  const bottom3Categories = [...metrics.categories].filter(c => c.sales > 0).sort((a, b) => a.sales - b.sales).slice(0, 3);
 
-  // Cálculos para Ventas Día a Día Header
-  let lastDaySales = 0;
-  let prevDaySales = 0;
-  let growthPct = 0;
-  let bestAgentToday = { name: 'N/A', sales: 0 };
-  
+  let lastDaySales = 0, prevDaySales = 0, growthPct = 0, bestAgentToday = { name: 'N/A', sales: 0 };
   if (metrics.daily.length > 0) {
-      const nonEmptyDays = metrics.daily.filter(d => d.total > 0); // Considerar último día con venta real
-      if (nonEmptyDays.length > 0) {
-          const lastDayData = nonEmptyDays[nonEmptyDays.length - 1];
-          lastDaySales = lastDayData.total;
-          bestAgentToday = lastDayData.bestAgent || { name: 'N/A', sales: 0 };
-          
-          if (nonEmptyDays.length > 1) {
-              prevDaySales = nonEmptyDays[nonEmptyDays.length - 2].total;
-              if (prevDaySales > 0) {
-                  growthPct = ((lastDaySales - prevDaySales) / prevDaySales) * 100;
-              }
+      const nonEmpty = metrics.daily.filter(d => d.total > 0);
+      if (nonEmpty.length > 0) {
+          const last = nonEmpty[nonEmpty.length - 1];
+          lastDaySales = last.total;
+          bestAgentToday = last.bestAgent || { name: 'N/A', sales: 0 };
+          if (nonEmpty.length > 1) {
+              prevDaySales = nonEmpty[nonEmpty.length - 2].total;
+              if (prevDaySales > 0) growthPct = ((lastDaySales - prevDaySales) / prevDaySales) * 100;
           }
       }
   }
 
-  const fmtMoney = (n) => '$' + n.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
-
   const customStyles = `
-    :root { --primary: #0f172a; --accent: #f59e0b; --glass: rgba(255, 255, 255, 0.85); }
-    body { font-family: 'Plus Jakarta Sans', sans-serif; background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); color: #1e293b; min-height: 100vh; }
-    .glass-card {
-        background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-        border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 20px;
-        box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05); transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
-    }
-    .glass-card:hover { transform: translateY(-5px); box-shadow: 0 12px 30px -4px rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); }
-    .metric-mini-exec {
-        background: rgba(255, 255, 255, 0.6); border: 1px solid rgba(226, 232, 240, 0.8);
-        border-radius: 16px; padding: 1rem; text-align: center; transition: all 0.3s ease;
-    }
-    .metric-mini-exec:hover { border-color: var(--accent); background: #fff; }
-    .hero-upload {
-        min-height: 60vh; display: flex; flex-direction: column; justify-content: center; align-items: center;
-        text-align: center; border: 2px dashed #cbd5e1; border-radius: 24px; background: rgba(255,255,255,0.4);
-    }
+    :root { --glass: rgba(255, 255, 255, 0.85); }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background: linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 100%); color: #1e293b; min-height: 100vh; }
+    .glass-card { background: var(--glass); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 24px; box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05); transition: all 0.4s ease; }
+    .glass-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -4px rgba(0, 0, 0, 0.05); }
+    .metric-mini-exec { background: rgba(255, 255, 255, 0.5); border: 1px solid rgba(255,255,255,0.6); border-radius: 16px; padding: 1rem; text-align: center; transition: all 0.3s; }
+    .metric-mini-exec:hover { background: #fff; transform: scale(1.02); border-color: #f59e0b; }
+    .fill-mode-forwards { animation-fill-mode: forwards; }
   `;
 
-  if (loading) {
-     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-900">
-           <i className="ph ph-spinner animate-spin text-amber-500 text-4xl"></i>
-        </div>
-     );
-  }
-
-  if (!user) {
-    return (
-        <>
-            <style>{customStyles}</style>
-            <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-            <Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} />
-            <LoginScreen onLoginGuest={handleLoginGuest} onLoginEmail={handleLoginEmail} />
-        </>
-    );
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><i className="ph ph-spinner animate-spin text-amber-500 text-4xl"></i></div>;
+  if (!user) return <><style>{customStyles}</style><Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} /><LoginScreen onLoginGuest={handleLoginGuest} onLoginEmail={handleLoginEmail} /></>;
 
   return (
     <>
       <style>{customStyles}</style>
       <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-      
-      {/* Overlay de Carga (Global) */}
-      {isUploading && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center">
-           <div className="relative">
-             <div className="w-16 h-16 border-4 border-slate-700 border-t-amber-500 rounded-full animate-spin"></div>
-             <div className="absolute inset-0 flex items-center justify-center">
-               <i className="ph-fill ph-file-arrow-up text-white text-xl"></i>
-             </div>
-           </div>
-           <h3 className="text-white font-bold mt-6 text-lg animate-pulse">Procesando Datos...</h3>
-           <p className="text-slate-400 text-sm mt-2">Leyendo fechas y calculando métricas</p>
-        </div>
-      )}
-
-      {/* Modal de Confirmación */}
-      <ConfirmModal 
-        isOpen={showConfirmModal}
-        title="Reemplazar Datos Existentes"
-        message="Ya hay información cargada en el sistema. ¿Estás seguro de que deseas reemplazar los datos actuales con el nuevo archivo? Esta acción no se puede deshacer."
-        onCancel={cancelReplace}
-        onConfirm={confirmReplace}
-      />
-
-      {/* Notificaciones */}
+      {isUploading && <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center"><i className="ph ph-spinner animate-spin text-white text-4xl mb-4"></i><p className="text-white font-bold">Procesando...</p></div>}
+      <ConfirmModal isOpen={showConfirmModal} title="Reemplazar Datos" message="¿Reemplazar datos existentes?" onCancel={cancelReplace} onConfirm={confirmReplace} />
       <Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} />
 
       <div className="p-4 lg:p-8 animate-fade-in">
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="max-w-7xl mx-auto space-y-8">
           
-          {/* Header Siempre Visible */}
           <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             <div className="space-y-1">
               <div className="flex items-center gap-3">
@@ -1013,309 +794,242 @@ export default function App() {
               </div>
               <p className="text-slate-500 font-medium ml-12">Performance Analytics & Control de Metas</p>
             </div>
-            
-            <div className="flex flex-wrap items-center gap-4 bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-slate-200">
-              <label className="group cursor-pointer px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-slate-900/30">
-                <i className="ph ph-file-xls font-bold text-amber-500"></i>
-                <span>Importar Datos</span>
-                <input 
-                  type="file" 
-                  ref={fileInputRef}
-                  onChange={handleFileSelect} 
-                  accept=".xlsx, .xls, .csv" 
-                  className="hidden" 
-                />
+            <div className="flex flex-wrap items-center gap-4 bg-white/60 backdrop-blur-md p-2 rounded-2xl border border-white/50">
+              <label className="group cursor-pointer px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-xl shadow-slate-900/20 hover:shadow-slate-900/40 transform hover:-translate-y-0.5">
+                <i className="ph ph-file-xls font-bold text-amber-500"></i><span>Importar</span>
+                <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls, .csv" className="hidden" />
               </label>
-              
-              <button 
-                onClick={handleLogout}
-                className="px-4 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 rounded-xl text-sm font-bold transition-all flex items-center gap-2"
-                title="Cerrar Sesión"
-              >
-                <i className="ph-bold ph-sign-out"></i>
-              </button>
+              <button onClick={handleLogout} className="px-4 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 rounded-xl text-sm font-bold transition-all"><i className="ph-bold ph-sign-out"></i></button>
             </div>
           </header>
 
-          {/* ESTADO VACIO: Mostrar Hero de Carga */}
           {metrics.agents.length === 0 ? (
-             <div className="hero-upload animate-fade-in space-y-4">
-                <div className="p-6 bg-slate-100 rounded-full text-slate-400">
-                    <i className="ph-duotone ph-cloud-arrow-up text-6xl"></i>
-                </div>
-                <h2 className="text-2xl font-bold text-slate-700">Comencemos</h2>
-                <p className="text-slate-500 max-w-md">
-                    {dataLoading ? "Sincronizando datos de la nube..." : "No hay datos cargados en el sistema. Sube tu archivo Excel para visualizar las métricas."}
-                </p>
-                {!dataLoading && (
-                    <label className="cursor-pointer px-8 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-500/30 transition-all flex items-center gap-2">
-                        <i className="ph-bold ph-upload-simple"></i>
-                        Subir Archivo Excel
-                        <input 
-                            type="file" 
-                            ref={fileInputRef}
-                            onChange={handleFileSelect} 
-                            accept=".xlsx, .xls, .csv" 
-                            className="hidden" 
-                        />
-                    </label>
-                )}
+             <div className="min-h-[60vh] flex flex-col justify-center items-center text-center bg-white/40 rounded-3xl border-2 border-dashed border-slate-300">
+                <div className="p-6 bg-white rounded-full text-amber-500 shadow-xl mb-6"><i className="ph-duotone ph-upload-simple text-5xl"></i></div>
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">Dashboard Vacío</h2>
+                <p className="text-slate-500 max-w-sm mb-6">Importa tu archivo Excel de ventas para generar las visualizaciones.</p>
+                <label className="cursor-pointer px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex gap-2"><i className="ph-bold ph-file-plus"></i> Cargar Datos<input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls" className="hidden" /></label>
              </div>
           ) : (
             <>
-              {/* CONTENIDO DASHBOARD - REORDENADO SEGUN INSTRUCCIONES */}
-              
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 
-                {/* COLUMNA IZQUIERDA (3 SPAN): Métricas y KPIs */}
+                {/* LEFT COL: KPIs */}
                 <div className="lg:col-span-3 flex flex-col gap-6">
-                    
-                    {/* 1. KPI Principales Grid (MOVIDO ARRIBA Y HECHO MAS GRAFICO) */}
+                    {/* KPI GRID */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* KPI 1 - Gráfico: Circular Progress */}
-                        <div className={`glass-card p-5 border-l-4 ${isCCAhead ? 'border-l-amber-500' : 'border-l-rose-500'} flex items-center gap-4`}>
-                            <CircularProgress 
-                                value={totalSales} 
-                                max={goalCCToday} 
-                                color={isCCAhead ? 'text-amber-500' : 'text-rose-500'} 
-                                size={70} 
-                            />
-                            <div className="flex-1">
+                        {/* KPI 1 */}
+                        <div className={`glass-card p-5 border-l-4 ${isCCAhead ? 'border-l-emerald-500' : 'border-l-rose-500'} flex items-center gap-5 relative overflow-hidden`}>
+                            <CircularProgress value={totalSales} max={goalCCToday} color={isCCAhead ? 'text-emerald-500' : 'text-rose-500'} size={76} />
+                            <div className="flex-1 z-10">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Venta vs Cuota Hoy</p>
                                 <div className="flex flex-col">
-                                    <span className="text-2xl font-black text-slate-900">{fmtMoney(totalSales)}</span>
-                                    <span className="text-[10px] font-bold text-slate-400">Meta: {fmtMoney(goalCCToday)}</span>
+                                    <span className="text-2xl font-black text-slate-900"><AnimatedCounter value={totalSales} prefix="$" /></span>
+                                    <span className="text-[10px] font-bold text-slate-400 mt-1">Meta: {formatCurrency(goalCCToday)}</span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* KPI 2 - Gráfico: Barra de Proyección */}
-                        <div className="glass-card p-5 border-l-4 border-l-blue-800 flex flex-col justify-center">
-                            <div className="flex justify-between items-center mb-2">
+                        {/* KPI 2 */}
+                        <div className="glass-card p-5 border-l-4 border-l-blue-600 flex flex-col justify-center relative overflow-hidden group">
+                            <div className="absolute right-0 top-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl -mr-8 -mt-8"></div>
+                            <div className="flex justify-between items-center mb-2 z-10">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Run Rate Cierre</p>
-                                <i className="ph-fill ph-chart-line-up text-blue-800"></i>
+                                <i className="ph-fill ph-chart-line-up text-blue-600 text-lg"></i>
                             </div>
-                            <span className="text-2xl font-black text-slate-900 mb-2">{fmtMoney(daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0)}</span>
-                            
-                            {/* Barra Visual */}
-                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden flex">
-                                <div className="bg-blue-800 h-full rounded-full" style={{width: '70%'}}></div>
+                            <span className="text-2xl font-black text-slate-900 mb-2 z-10"><AnimatedCounter value={daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0} prefix="$" /></span>
+                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden flex z-10">
+                                <div className="bg-blue-600 h-full rounded-full animate-grow-up origin-left" style={{width: '70%'}}></div>
                                 <div className="bg-blue-300 h-full" style={{width: '30%'}}></div>
-                            </div>
-                            <div className="flex justify-between mt-1 text-[9px] font-bold text-slate-400 uppercase">
-                                <span>Real</span>
-                                <span>Proyección</span>
                             </div>
                         </div>
 
-                        {/* KPI 3 - Gráfico: Barra de Falta */}
-                        <div className="glass-card p-5 border-l-4 border-l-slate-900 flex flex-col justify-center">
+                        {/* KPI 3 */}
+                        <div className="glass-card p-5 border-l-4 border-l-slate-800 flex flex-col justify-center relative overflow-hidden">
                              <div className="flex justify-between items-center mb-2">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Pendiente</p>
-                                <i className="ph-fill ph-hourglass-high text-slate-900"></i>
+                                <i className="ph-fill ph-hourglass-high text-slate-800 text-lg"></i>
                             </div>
-                            <span className="text-2xl font-black text-slate-900 mb-2">{fmtMoney(Math.max(0, goalMonthCC - totalSales))}</span>
-                            
-                            {/* Barra Inversa */}
-                            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                                <div className="bg-slate-900 h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (Math.max(0, goalMonthCC - totalSales) / goalMonthCC) * 100)}%` }}></div>
+                            <span className="text-2xl font-black text-slate-900 mb-2"><AnimatedCounter value={Math.max(0, goalMonthCC - totalSales)} prefix="$" /></span>
+                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                                <div className="bg-slate-800 h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (Math.max(0, goalMonthCC - totalSales) / goalMonthCC) * 100)}%` }}></div>
                             </div>
-                             <div className="mt-1 text-[10px] font-bold text-slate-500 text-right">
-                                Restan {daysTotal - daysElapsed} días hábiles
+                             <div className="mt-2 text-[10px] font-bold text-slate-500 text-right">
+                                Restan <span className="text-slate-800">{daysTotal - daysElapsed}</span> días hábiles
                             </div>
                         </div>
                     </div>
 
-                    {/* 2. Panel de Parámetros (MOVIDO ABAJO) */}
+                    {/* METRIC PARAMETERS */}
                     <section className="glass-card p-6">
-                        <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                            <span className="w-8 h-[3px] bg-amber-500 rounded-full"></span>
-                            Métricas de Control Diario
-                        </h3>
-                        <div className="text-xs font-bold text-slate-400">
-                            Días Laborales: {daysTotal} | Transcurridos: {daysElapsed}
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                <span className="w-6 h-[3px] bg-amber-500 rounded-full"></span> Métricas de Control
+                            </h3>
+                            <div className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500">
+                                Días: {daysElapsed} / {daysTotal}
+                            </div>
                         </div>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                        <div className="metric-mini-exec bg-amber-50/50 border-amber-200/50">
-                            <div className="text-[10px] font-extrabold text-amber-700 uppercase mb-1">Ritmo Esperado Hoy</div>
-                            <div className="text-2xl font-black text-amber-600">{(targetPercentToday * 100).toFixed(0)}%</div>
-                        </div>
-                        <div className="metric-mini-exec">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes x Agente</div>
-                            <div className="text-xl font-bold text-slate-800">{fmtMoney(goalMonthAgent)}</div>
-                        </div>
-                        <div className="metric-mini-exec">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día x Agente</div>
-                            <div className="text-xl font-bold text-slate-800">{fmtMoney(goalDailyAgent)}</div>
-                        </div>
-                        <div className="metric-mini-exec">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes Call Center</div>
-                            <div className="text-xl font-bold text-slate-800">{fmtMoney(goalMonthCC)}</div>
-                        </div>
-                        <div className="metric-mini-exec">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día Call Center</div>
-                            <div className="text-xl font-bold text-slate-800">{fmtMoney(goalDailyCC)}</div>
-                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <div className="metric-mini-exec bg-amber-50/50 border-amber-200/50">
+                                <div className="text-[9px] font-extrabold text-amber-700 uppercase mb-1">Ritmo Esperado</div>
+                                <div className="text-xl font-black text-amber-600">{(targetPercentToday * 100).toFixed(0)}%</div>
+                            </div>
+                            <div className="metric-mini-exec">
+                                <div className="text-[9px] font-bold text-slate-400 uppercase mb-1">Meta Mes Agente</div>
+                                <div className="text-lg font-bold text-slate-800">{formatCurrency(goalMonthAgent)}</div>
+                            </div>
+                            <div className="metric-mini-exec">
+                                <div className="text-[9px] font-bold text-slate-400 uppercase mb-1">Meta Día Agente</div>
+                                <div className="text-lg font-bold text-slate-800">{formatCurrency(goalDailyAgent)}</div>
+                            </div>
+                            <div className="metric-mini-exec">
+                                <div className="text-[9px] font-bold text-slate-400 uppercase mb-1">Meta Mes CC</div>
+                                <div className="text-lg font-bold text-slate-800">{formatCurrency(goalMonthCC)}</div>
+                            </div>
+                            <div className="metric-mini-exec">
+                                <div className="text-[9px] font-bold text-slate-400 uppercase mb-1">Meta Día CC</div>
+                                <div className="text-lg font-bold text-slate-800">{formatCurrency(goalDailyCC)}</div>
+                            </div>
                         </div>
                     </section>
                 </div>
 
-                {/* COLUMNA DERECHA (1 SPAN): Market Share (MAS DINAMICO) */}
+                {/* RIGHT COL: Market Share Dinámico */}
                 <div className="lg:col-span-1">
-                     <div className="glass-card p-6 h-full flex flex-col items-center justify-center relative overflow-hidden group">
-                        {/* Background Decoration */}
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-
-                        <div className="w-full text-center mb-6 relative z-10">
-                            <h3 className="font-extrabold text-slate-800 flex items-center justify-center gap-2">
-                                <i className="ph ph-chart-pie-slice text-amber-500 text-xl group-hover:scale-110 transition-transform"></i>
-                                Market Share Interno
+                     <div className="glass-card p-6 h-full flex flex-col items-center justify-center relative overflow-hidden group hover:bg-white/90 transition-all">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-amber-500/20 transition-all"></div>
+                        <div className="w-full text-center mb-4 relative z-10">
+                            <h3 className="font-extrabold text-slate-800 flex items-center justify-center gap-2 text-sm">
+                                <i className="ph-fill ph-chart-pie-slice text-amber-500 text-lg"></i>
+                                Market Share
                             </h3>
                         </div>
                         
-                        {/* Gráfico Dinámico */}
-                        <div className="relative w-full aspect-square max-w-[220px] transition-transform duration-500 hover:scale-105">
+                        <div className="relative w-full aspect-square max-w-[200px] transition-transform duration-500 hover:scale-105 cursor-pointer">
                             <canvas ref={pieChartRef}></canvas>
-                            {/* Centro del gráfico */}
+                            {/* Centro del gráfico DINAMICO */}
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <div className="text-center">
-                                    <span className="block text-xs font-bold text-slate-400">TOTAL</span>
-                                    <span className="block text-lg font-black text-slate-800">{fmtMoney(totalSales)}</span>
+                                <div className="text-center transition-all duration-300">
+                                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                                        {hoveredAgent ? hoveredAgent.name : 'TOTAL'}
+                                    </span>
+                                    <span className={`block font-black text-slate-800 ${hoveredAgent ? 'text-xl text-amber-600 scale-110' : 'text-lg'}`}>
+                                        {hoveredAgent ? formatCurrency(hoveredAgent.sales) : formatCurrency(totalSales)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
-
-                        <div className="mt-8 w-full p-4 rounded-xl bg-slate-900 text-center text-white shadow-xl shadow-slate-900/30 ring-1 ring-white/10 relative z-10">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Volumen Total Operado</p>
-                            <p className="text-2xl font-black text-white">${totalSales.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
-                        </div>
                     </div>
                 </div>
-
               </div>
               
-              {/* 3. Ventas Día a Día (CON MEJORAS: Comparison & Best Seller) */}
+              {/* Ventas Día a Día - Improved Header */}
               <section className="glass-card p-6 mt-6">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                    <div className="flex items-center gap-3">
-                         <div className="p-2 bg-amber-100 rounded-lg text-amber-600">
-                             <i className="ph-bold ph-chart-line-up text-xl"></i>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+                    <div className="flex items-center gap-4">
+                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/30">
+                             <i className="ph-bold ph-chart-line-up text-2xl"></i>
                          </div>
                          <div>
-                             <h3 className="font-extrabold text-slate-800">Ventas Día a Día</h3>
-                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Año en Curso</p>
+                             <h3 className="text-lg font-extrabold text-slate-800">Ventas Diarias</h3>
+                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Seguimiento Diario</p>
                          </div>
                     </div>
                     
-                    {/* Estadísticas de Header (Nuevo) */}
                     <div className="flex gap-4">
-                        <div className={`px-4 py-2 rounded-xl border flex items-center gap-3 ${growthPct >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
-                            <div className={`text-2xl ${growthPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        <div className={`px-5 py-2.5 rounded-2xl border flex items-center gap-3 ${growthPct >= 0 ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
+                            <div className={`text-2xl ${growthPct >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                                 <i className={`ph-fill ${growthPct >= 0 ? 'ph-trend-up' : 'ph-trend-down'}`}></i>
                             </div>
                             <div>
                                 <div className={`text-lg font-black ${growthPct >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                                     {growthPct > 0 ? '+' : ''}{growthPct.toFixed(1)}%
                                 </div>
-                                <div className="text-[10px] font-bold text-slate-400 uppercase">vs Día Anterior</div>
+                                <div className="text-[9px] font-bold text-slate-400 uppercase">vs Día Anterior</div>
                             </div>
                         </div>
 
-                        <div className="px-4 py-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-3">
-                             <div className="text-2xl text-amber-500">
+                        <div className="px-5 py-2.5 rounded-2xl bg-white border border-slate-100 flex items-center gap-3 shadow-sm">
+                             <div className="text-2xl text-amber-500 animate-pulse-slow">
                                 <i className="ph-fill ph-trophy"></i>
                             </div>
                             <div>
-                                <div className="text-sm font-black text-slate-800 flex items-center gap-1">
-                                    {bestAgentToday.name}
-                                    <span className="text-xs font-normal text-slate-500">({fmtMoney(bestAgentToday.sales)})</span>
+                                <div className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                                    {bestAgentToday.name.split(' ')[0]}
+                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] text-slate-500 font-bold">{formatCurrency(bestAgentToday.sales)}</span>
                                 </div>
-                                <div className="text-[10px] font-bold text-slate-400 uppercase">Mejor Vendedor (Hoy)</div>
+                                <div className="text-[9px] font-bold text-slate-400 uppercase">MVP del Día</div>
                             </div>
                         </div>
                     </div>
                   </div>
-                  
-                  <div className="h-48 w-full relative">
-                     <canvas ref={lineChartRef}></canvas>
-                  </div>
+                  <div className="h-56 w-full relative"><canvas ref={lineChartRef}></canvas></div>
               </section>
 
-              {/* 4. Secciones de Análisis (Full Width) */}
+              {/* Secciones Finales */}
               <div className="space-y-8 mt-8">
-                
-                {/* Histórico Visual */}
-                <div className="glass-card p-8">
-                  <div className="flex items-center justify-between mb-8">
-                    <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
-                      <i className="ph ph-trend-up text-amber-500 text-xl"></i>
-                      Evolución Anual Comparativa (Real)
-                    </h3>
-                  </div>
-                  <div className="h-60 w-full relative">
-                    <canvas ref={barChartRef}></canvas>
-                  </div>
-                </div>
-
-                {/* Tabla Ejecutiva */}
-                <div className="glass-card overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white/40">
-                    <h2 className="font-extrabold text-slate-800 flex items-center gap-2">
-                      <i className="ph ph-users-four text-amber-500 text-xl"></i>
-                      Ranking de Operaciones (Año Actual)
+                {/* PODIO + Ranking */}
+                <div className="glass-card overflow-hidden pb-6">
+                  <div className="p-6 bg-gradient-to-r from-white via-slate-50 to-white border-b border-slate-100">
+                    <h2 className="font-extrabold text-slate-800 flex items-center gap-2 text-lg justify-center md:justify-start">
+                      <i className="ph-fill ph-medal text-amber-500 text-2xl"></i>
+                      Ranking de Campeones
                     </h2>
                   </div>
+
+                  {/* VISUAL PODIUM */}
+                  <div className="bg-slate-50/50 border-b border-slate-100 mb-4">
+                      <Podium agents={processedAgents} />
+                  </div>
                   
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
+                  <div className="overflow-x-auto px-6">
+                    <table className="w-full text-sm text-left border-collapse">
                       <thead>
-                        <tr className="text-[10px] text-slate-400 uppercase tracking-widest bg-slate-50/50">
-                          <th className="px-8 py-4 font-black">Asesor Comercial</th>
-                          <th className="px-6 py-4 font-black text-right">Venta Real</th>
-                          <th className="px-6 py-4 font-black text-right">Brecha Meta</th>
-                          <th className="px-6 py-4 font-black text-center">Cumplimiento</th>
-                          <th className="px-8 py-4 font-black text-center">Estatus</th>
+                        <tr className="text-[10px] text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                          <th className="px-4 py-4 font-black">Asesor</th>
+                          <th className="px-4 py-4 font-black text-right">Venta Real</th>
+                          <th className="px-4 py-4 font-black text-right">Brecha</th>
+                          <th className="px-4 py-4 font-black text-center">Progreso</th>
+                          <th className="px-4 py-4 font-black text-center">Estado</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-slate-50">
                         {processedAgents.map((agent, index) => {
                           const percentage = agent.percent * 100;
                           const standardPace = daysTotal > 0 ? (daysElapsed/daysTotal) : 0;
                           const isAhead = agent.percent >= standardPace;
+                          const initials = getInitials(agent.name);
                           
-                          let rankColor = 'bg-slate-100 text-slate-600';
-                          if(index === 0) rankColor = 'bg-amber-100 text-amber-700 ring-2 ring-amber-400';
-                          if(index === 1) rankColor = 'bg-slate-200 text-slate-700';
-                          if(index === 2) rankColor = 'bg-orange-100 text-orange-800';
-
                           return (
-                            <tr key={index} className="group transition-all hover:bg-white/60">
-                              <td className="px-8 py-4">
+                            <tr key={index} className="group transition-all hover:bg-slate-50">
+                              <td className="px-4 py-4">
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-8 h-8 rounded-full ${rankColor} flex items-center justify-center text-xs font-bold transition-all`}>
-                                    {index + 1}
+                                  <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 font-black text-xs flex items-center justify-center ring-2 ring-white shadow-sm">
+                                    {initials}
                                   </div>
-                                  <span className="font-bold text-slate-700 tracking-tight">{agent.name}</span>
+                                  <div>
+                                     <span className="font-bold text-slate-700 block">{agent.name}</span>
+                                     <span className="text-[10px] text-slate-400 font-bold uppercase">Rank #{index+1}</span>
+                                  </div>
                                 </div>
                               </td>
-                              <td className="px-6 py-4 text-right font-bold text-slate-900">${agent.sales.toLocaleString('en-US')}</td>
-                              <td className={`px-6 py-4 text-right font-bold ${agent.diff >= 0 ? 'text-amber-600' : 'text-rose-500'}`}>
+                              <td className="px-4 py-4 text-right font-black text-slate-800 text-base">{formatCurrency(agent.sales)}</td>
+                              <td className={`px-4 py-4 text-right font-bold ${agent.diff >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                                 {agent.diff >= 0 ? '+' : ''}{Math.round(agent.diff).toLocaleString('en-US')}
                               </td>
-                              <td className="px-6 py-4">
-                                <div className="flex flex-col items-center gap-1.5">
-                                  <div className="w-32 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                                    <div className="bg-slate-900 h-1.5 rounded-full transition-all duration-1000" style={{width: `${Math.min(percentage, 100)}%`}}></div>
+                              <td className="px-4 py-4">
+                                <div className="flex flex-col items-center gap-1">
+                                  <div className="w-24 bg-slate-100 rounded-full h-2 overflow-hidden shadow-inner">
+                                    <div className={`h-2 rounded-full transition-all duration-1000 ${isAhead ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{width: `${Math.min(percentage, 100)}%`}}></div>
                                   </div>
-                                  <span className="text-[10px] font-black text-slate-500">{percentage.toFixed(1)}%</span>
+                                  <span className="text-[9px] font-black text-slate-400">{percentage.toFixed(1)}%</span>
                                 </div>
                               </td>
-                              <td className="px-8 py-4 flex justify-center">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isAhead ? 'bg-amber-100 text-amber-700' : 'bg-rose-50 text-rose-600'}`}>
+                              <td className="px-4 py-4 text-center">
+                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${isAhead ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
                                   <i className={`ph-fill ${isAhead ? 'ph-check-circle' : 'ph-warning-circle'}`}></i>
-                                  {isAhead ? 'Objetivo OK' : 'En Alerta'}
+                                  {isAhead ? 'On Track' : 'Off Track'}
                                 </span>
                               </td>
                             </tr>
@@ -1326,62 +1040,45 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 5. NUEVO: Análisis de Categorías L2 (Top 3 Mas / Menos Vendida) */}
+                {/* Categorías */}
                 {top3Categories.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Top 3 Más Vendida */}
-                    <div className="glass-card overflow-hidden">
-                        <div className="p-4 border-b border-slate-100 bg-emerald-50/50">
-                             <h3 className="font-bold text-emerald-800 flex items-center gap-2">
-                                <i className="ph-fill ph-trophy text-emerald-600"></i>
-                                Top 3 Categoria_L2 Más Vendidas
+                    {/* Winners */}
+                    <div className="glass-card overflow-hidden border-t-4 border-t-emerald-500">
+                        <div className="p-4 border-b border-slate-100 bg-emerald-50/30 flex justify-between items-center">
+                             <h3 className="font-bold text-emerald-900 flex items-center gap-2 text-sm uppercase tracking-wide">
+                                <i className="ph-fill ph-trophy text-emerald-500 text-lg"></i> Top Sellers (L2)
                              </h3>
                         </div>
-                        <div className="p-0">
+                        <div className="p-2">
                             <table className="w-full text-sm">
-                                <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
-                                    <tr>
-                                        <th className="px-4 py-2 text-left">Categoria_L2</th>
-                                        <th className="px-4 py-2 text-right">Cant.</th>
-                                        <th className="px-4 py-2 text-right">Ventas</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
+                                <tbody className="divide-y divide-slate-50">
                                     {top3Categories.map((cat, idx) => (
-                                        <tr key={idx} className="hover:bg-emerald-50/30 transition-colors">
-                                            <td className="px-4 py-3 font-bold text-slate-700">{cat.name}</td>
-                                            <td className="px-4 py-3 text-right text-slate-600">{cat.quantity.toLocaleString()}</td>
-                                            <td className="px-4 py-3 text-right font-bold text-emerald-700">${cat.sales.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
+                                        <tr key={idx} className="hover:bg-emerald-50/20">
+                                            <td className="px-4 py-3 font-bold text-slate-700 text-xs">{cat.name}</td>
+                                            <td className="px-4 py-3 text-right text-slate-500 text-xs">{cat.quantity} und</td>
+                                            <td className="px-4 py-3 text-right font-bold text-emerald-700">{formatCurrency(cat.sales)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
                     </div>
-
-                    {/* Top 3 Menos Vendida */}
-                    <div className="glass-card overflow-hidden">
-                        <div className="p-4 border-b border-slate-100 bg-rose-50/50">
-                             <h3 className="font-bold text-rose-800 flex items-center gap-2">
-                                <i className="ph-fill ph-trend-down text-rose-600"></i>
-                                Top 3 Categoria_L2 Menos Vendidas
+                    {/* Low Performers */}
+                    <div className="glass-card overflow-hidden border-t-4 border-t-rose-500">
+                        <div className="p-4 border-b border-slate-100 bg-rose-50/30 flex justify-between items-center">
+                             <h3 className="font-bold text-rose-900 flex items-center gap-2 text-sm uppercase tracking-wide">
+                                <i className="ph-fill ph-trend-down text-rose-500 text-lg"></i> Low Volume (L2)
                              </h3>
                         </div>
-                        <div className="p-0">
+                        <div className="p-2">
                             <table className="w-full text-sm">
-                                <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
-                                    <tr>
-                                        <th className="px-4 py-2 text-left">Categoria_L2</th>
-                                        <th className="px-4 py-2 text-right">Cant.</th>
-                                        <th className="px-4 py-2 text-right">Ventas</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
+                                <tbody className="divide-y divide-slate-50">
                                     {bottom3Categories.map((cat, idx) => (
-                                        <tr key={idx} className="hover:bg-rose-50/30 transition-colors">
-                                            <td className="px-4 py-3 font-bold text-slate-700">{cat.name}</td>
-                                            <td className="px-4 py-3 text-right text-slate-600">{cat.quantity.toLocaleString()}</td>
-                                            <td className="px-4 py-3 text-right font-bold text-rose-700">${cat.sales.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
+                                        <tr key={idx} className="hover:bg-rose-50/20">
+                                            <td className="px-4 py-3 font-bold text-slate-700 text-xs">{cat.name}</td>
+                                            <td className="px-4 py-3 text-right text-slate-500 text-xs">{cat.quantity} und</td>
+                                            <td className="px-4 py-3 text-right font-bold text-rose-700">{formatCurrency(cat.sales)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -1390,7 +1087,14 @@ export default function App() {
                     </div>
                 </div>
                 )}
-
+                {/* Annual History */}
+                <div className="glass-card p-8 relative overflow-hidden">
+                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400"></div>
+                   <h3 className="font-extrabold text-slate-800 flex items-center gap-2 mb-6 text-sm uppercase tracking-widest">
+                      <i className="ph-fill ph-clock-counter-clockwise text-slate-400 text-lg"></i> Evolución Histórica
+                   </h3>
+                   <div className="h-52 w-full relative"><canvas ref={barChartRef}></canvas></div>
+                </div>
               </div>
             </>
           )}
