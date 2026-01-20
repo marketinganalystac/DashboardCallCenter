@@ -52,12 +52,19 @@ const getPanamaBusinessDays = (targetDate = new Date()) => {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   let totalBusinessDays = 0;
   let elapsedBusinessDays = 0;
+  
   for (let day = 1; day <= daysInMonth; day++) {
     const current = new Date(year, month, day);
     const dayOfWeek = current.getDay();
-    const dateString = current.toISOString().split('T')[0];
+    
+    // CORRECCIÓN: Generar string localmente para evitar cambio de día por UTC
+    const mStr = String(month + 1).padStart(2, '0');
+    const dStr = String(day).padStart(2, '0');
+    const dateString = `${year}-${mStr}-${dStr}`;
+    
     const isHoliday = holidays.includes(dateString);
     const isSunday = dayOfWeek === 0;
+    
     if (!isSunday && !isHoliday) {
       totalBusinessDays++;
       if (day <= todayDate) elapsedBusinessDays++;
@@ -545,8 +552,9 @@ export default function App() {
         if (lineInstance.current) lineInstance.current.destroy();
         const dailyDataPoints = metrics.daily; 
         const labels = dailyDataPoints.map(d => {
-            const date = new Date(d.date + 'T00:00:00'); // Force local interpretation
-            return date.getDate();
+            const dateParts = d.date.split('-'); // Esperamos YYYY-MM-DD
+            // Crear fecha localmente para visualización (solo día)
+            return parseInt(dateParts[2]);
         });
         const dataValues = dailyDataPoints.map(d => d.total);
         
@@ -716,9 +724,11 @@ export default function App() {
           else if (typeof rawDate === 'string') dateObj = new Date(rawDate);
           if (!dateObj || isNaN(dateObj.getTime())) continue;
 
+          // CORRECCIÓN: Usar getters locales para evitar discrepancias de UTC
           const year = dateObj.getFullYear();
           const month = dateObj.getMonth();
-          const dateStr = dateObj.toISOString().split('T')[0];
+          const day = dateObj.getDate();
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           
           const rawName = String(row[colIndices.name]).trim();
           
@@ -786,12 +796,17 @@ export default function App() {
         if (dailyMap.size > 0) {
             const sortedDates = Array.from(dailyMap.keys()).sort();
             if (sortedDates.length > 0) {
-                 const startDate = new Date(sortedDates[0]);
-                 const endDate = new Date(sortedDates[sortedDates.length - 1]);
-                 // Iteramos día por día para llenar huecos, pero nos aseguramos de no salirnos del mes lógico si hubiera saltos raros
-                 // Usamos UTC para evitar problemas de zona horaria en el loop
+                 // Usamos el string YYYY-MM-DD para crear las fechas de iteración
+                 // Y aseguramos la zona horaria añadiendo T00:00:00 para forzar el día correcto en la iteración
+                 const startDate = new Date(sortedDates[0] + 'T00:00:00');
+                 const endDate = new Date(sortedDates[sortedDates.length - 1] + 'T00:00:00');
+                 
                  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-                    const dStr = d.toISOString().split('T')[0];
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const dStr = `${y}-${m}-${day}`;
+                    
                     let bestAgentInfo = { name: '-', sales: 0 };
                     
                     if (dailyAgentSalesMap.has(dStr)) {
