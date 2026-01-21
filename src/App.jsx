@@ -175,7 +175,7 @@ const Podium = ({ agents }) => {
 
                         <div className={`w-full h-full rounded-t-2xl bg-gradient-to-t ${colorClass} shadow-lg relative flex items-end justify-center pb-4 transition-all duration-1000 transform scale-y-0 animate-grow-up origin-bottom podium-bar overflow-visible`}>
                             {/* Badge elevado con -top-12 */}
-                            <div className="absolute -top-12 w-11 h-11 md:w-14 md:h-14 rounded-full bg-white border-[4px] border-slate-50 shadow-2xl flex items-center justify-center z-20">
+                            <div className="absolute -top-16 w-11 h-11 md:w-14 md:h-14 rounded-full bg-white border-[4px] border-slate-50 shadow-2xl flex items-center justify-center z-20">
                                 <span className={`font-black text-3xl md:text-4xl drop-shadow-md tracking-[-0.05em] ${index === 1 ? 'text-amber-600' : (index === 0 ? 'text-slate-700' : 'text-orange-600')}`}>
                                     #{rank}
                                 </span>
