@@ -139,27 +139,48 @@ const Podium = ({ agents }) => {
         agents[2] || { name: 'Vacante', sales: 0 }
     ];
     const maxSales = Math.max(...top3.map(a => a.sales), 1);
+
     return (
-        <div className="flex items-end justify-center gap-2 md:gap-4 h-64 w-full pt-8 pb-0">
+        <div className="flex items-end justify-center gap-2 md:gap-4 h-64 w-full pt-14 pb-0">
             {top3.map((agent, index) => {
                 let rank = 0;
                 let colorClass = '';
                 let icon = '';
                 let delay = '';
-                if (index === 1) { rank = 1; colorClass = 'from-amber-300 to-amber-500 shadow-amber-500/50'; icon = 'ph-crown'; delay = 'delay-300'; }
-                else if (index === 0) { rank = 2; colorClass = 'from-slate-300 to-slate-400 shadow-slate-400/50'; icon = 'ph-medal'; delay = 'delay-500'; }
-                else { rank = 3; colorClass = 'from-orange-300 to-orange-400 shadow-orange-400/50'; icon = 'ph-medal'; delay = 'delay-700'; }
+                if (index === 1) { 
+                    rank = 1; 
+                    colorClass = 'from-amber-300 to-amber-500 shadow-amber-500/50'; 
+                    icon = 'ph-crown'; 
+                    delay = 'delay-300'; 
+                } else if (index === 0) { 
+                    rank = 2; 
+                    colorClass = 'from-slate-300 to-slate-400 shadow-slate-400/50'; 
+                    icon = 'ph-medal'; 
+                    delay = 'delay-500'; 
+                } else { 
+                    rank = 3; 
+                    colorClass = 'from-orange-300 to-orange-400 shadow-orange-400/50'; 
+                    icon = 'ph-medal'; 
+                    delay = 'delay-700'; 
+                }
+                
                 const visualHeight = index === 1 ? 'h-[90%]' : (index === 0 ? 'h-[75%]' : 'h-[60%]');
+
                 return (
                     <div key={index} className={`flex flex-col items-center justify-end w-24 md:w-32 group ${visualHeight} transition-transform hover:scale-105 duration-300`}>
                         <div className={`mb-2 flex flex-col items-center transition-all duration-700 opacity-0 animate-fade-in-down ${delay} fill-mode-forwards`}>
                             <div className="font-bold text-slate-700 text-xs md:text-sm text-center line-clamp-1 mb-1">{agent.name.split(' ')[0]}</div>
                             <div className="font-black text-slate-900 text-sm md:text-base"><AnimatedCounter value={agent.sales} prefix="$" /></div>
                         </div>
-                        <div className={`w-full h-full rounded-t-2xl bg-gradient-to-t ${colorClass} shadow-lg relative flex items-end justify-center pb-4 transition-all duration-1000 transform scale-y-0 animate-grow-up origin-bottom podium-bar`}>
-                            <div className="absolute -top-6 w-9 h-9 md:w-11 md:h-11 rounded-full bg-white border-[3px] border-slate-50 shadow-xl flex items-center justify-center z-20">
-                                <span className={`font-black text-lg md:text-xl drop-shadow-sm ${index === 1 ? 'text-amber-600' : (index === 0 ? 'text-slate-700' : 'text-orange-600')}`}>#{rank}</span>
+
+                        <div className={`w-full h-full rounded-t-2xl bg-gradient-to-t ${colorClass} shadow-lg relative flex items-end justify-center pb-4 transition-all duration-1000 transform scale-y-0 animate-grow-up origin-bottom podium-bar overflow-visible`}>
+                            {/* Badge elevado con -top-12 */}
+                            <div className="absolute -top-12 w-11 h-11 md:w-14 md:h-14 rounded-full bg-white border-[4px] border-slate-50 shadow-2xl flex items-center justify-center z-20">
+                                <span className={`font-black text-3xl md:text-4xl drop-shadow-md tracking-[-0.05em] ${index === 1 ? 'text-amber-600' : (index === 0 ? 'text-slate-700' : 'text-orange-600')}`}>
+                                    #{rank}
+                                </span>
                             </div>
+                            
                             <i className={`ph-fill ${icon} text-white/30 text-4xl absolute bottom-2`}></i>
                         </div>
                     </div>
