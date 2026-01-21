@@ -140,7 +140,7 @@ const Podium = ({ agents }) => {
     ];
     const maxSales = Math.max(...top3.map(a => a.sales), 1);
     return (
-        <div className="flex items-end justify-center gap-2 md:gap-4 h-80 w-full pt-8 pb-0">
+        <div className="flex items-end justify-center gap-2 md:gap-4 h-80 w-full pt-0 pb-0">
             {top3.map((agent, index) => {
                 let rank = 0;
                 let colorClass = '';
