@@ -157,7 +157,7 @@ const Podium = ({ agents }) => {
                             <div className="font-black text-slate-900 text-sm md:text-base"><AnimatedCounter value={agent.sales} prefix="$" /></div>
                         </div>
                         <div className={`w-full h-full rounded-t-2xl bg-gradient-to-t ${colorClass} shadow-lg relative flex items-end justify-center pb-4 transition-all duration-1000 transform scale-y-0 animate-grow-up origin-bottom podium-bar`}>
-                            <div className="absolute -top-6 w-9 h-9 md:w-11 md:h-11 rounded-full bg-white border-[3px] border-slate-50 shadow-xl flex items-center justify-center z-20">
+                            <div className="absolute mt-2 -top-0 w-9 h-9 md:w-11 md:h-11 rounded-full bg-white border-[3px] border-slate-50 shadow-xl flex items-center justify-center z-20">
                                 <span className={`font-black text-lg md:text-xl drop-shadow-sm ${index === 1 ? 'text-amber-600' : (index === 0 ? 'text-slate-700' : 'text-orange-600')}`}>#{rank}</span>
                             </div>
                             <i className={`ph-fill ${icon} text-white/30 text-4xl absolute bottom-2`}></i>
