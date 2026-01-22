@@ -376,7 +376,7 @@ export default function App() {
     });
     Promise.all([
       loadScript("https://cdn.jsdelivr.net/npm/chart.js"),
-      loadScript("https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"),
+      loadScript("https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"),
       loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"),
       loadScript("https://unpkg.com/@phosphor-icons/web")
     ]).then(() => updateCharts());
@@ -390,14 +390,6 @@ export default function App() {
   const updateCharts = () => {
     if (typeof Chart === 'undefined') return;
     if (metrics.annual.length === 0) return;
-
-    if (typeof ChartDataLabels !== 'undefined') {
-        if (Chart.registry && !Chart.registry.plugins.get('datalabels')) {
-            Chart.register(ChartDataLabels);
-        } else if (!Chart.registry) {
-             Chart.register(ChartDataLabels);
-        }
-    }
 
     Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
     Chart.defaults.color = "#64748b";
@@ -437,16 +429,12 @@ export default function App() {
                  setHoveredAgent(null);
              }
           },
-          plugins: { 
-            legend: { display: false }, 
-            tooltip: { enabled: false },
-            datalabels: { display: false } 
-          }
+          plugins: { legend: { display: false }, tooltip: { enabled: false } }
         }
       });
     }
 
-    // Bar Chart - Evolución Histórica
+    // Bar Chart - Evolución Histórica (agrupadas, últimos 3 años, variación por agente en tooltip)
     if (barChartRef.current) {
       if (barInstance.current) barInstance.current.destroy();
       let sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
@@ -473,10 +461,7 @@ export default function App() {
       if (unknownData.some(v => v > 0)) {
            datasets.push({ label: 'Sin Desglose', data: unknownData, backgroundColor: '#cbd5e1', borderRadius: 4, barThickness: 28 });
       }
-      
-      // Nueva Meta Anual: 15000 * 12
       const annualGoal = 15000 * 12;
-      
       datasets.push({
           label: 'Meta Anual',
           data: sortedYears.map(() => annualGoal),
@@ -486,10 +471,8 @@ export default function App() {
           borderDash: [5, 5],
           pointRadius: 0,
           fill: false,
-          order: 0,
-          datalabels: { display: false }
+          order: 0
       });
-
       const ctxBar = barChartRef.current.getContext('2d');
       barInstance.current = new Chart(ctxBar, {
         type: 'bar',
@@ -504,21 +487,30 @@ export default function App() {
           plugins: { 
               legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: {size: 10} } },
               datalabels: {
-                  color: '#64748b',
-                  anchor: 'end',
-                  align: 'top',
-                  font: { size: 9, weight: 'bold' },
-                  formatter: (value, ctx) => {
-                      // Calcular % variación vs año anterior para este agente
-                      const dataIndex = ctx.dataIndex;
-                      if (dataIndex === 0) return ''; // No hay año anterior
-                      
-                      const prevValue = ctx.dataset.data[dataIndex - 1];
-                      if (!prevValue || prevValue === 0) return '';
-                      
-                      const diff = ((value - prevValue) / prevValue) * 100;
-                      return (diff > 0 ? '+' : '') + diff.toFixed(0) + '%';
-                  }
+                anchor: 'end',
+                align: 'end',
+                font: {
+                  size: 10,
+                  weight: 'bold'
+                },
+                formatter: (value, ctx) => {
+                  if (ctx.dataset.type === 'line') return null;
+                  const index = ctx.dataIndex;
+                  if (index === 0) return null;
+                  const prev = ctx.dataset.data[index - 1];
+                  if (prev === 0) return null;
+                  const pct = ((value - prev) / prev) * 100;
+                  const sign = pct >= 0 ? '+' : '';
+                  return sign + pct.toFixed(1) + '%';
+                },
+                color: (ctx) => {
+                  const index = ctx.dataIndex;
+                  if (index === 0) return null;
+                  const prev = ctx.dataset.data[index - 1];
+                  if (prev === 0) return null;
+                  const pct = ((ctx.dataset.data[index] - prev) / prev) * 100;
+                  return pct >= 0 ? '#10b981' : '#f43f5e';
+                }
               },
               tooltip: {
                   callbacks: {
@@ -544,7 +536,7 @@ export default function App() {
       });
     }
 
-    // Line Chart - Ventas Diarias (Más dinámico)
+    // Line Chart - Ventas Diarias (Density Style + Triángulos dinámicos)
     if (lineChartRef.current) {
         if (lineInstance.current) lineInstance.current.destroy();
         const dailyDataPoints = metrics.daily; 
@@ -557,69 +549,62 @@ export default function App() {
         });
         const ctxLine = lineChartRef.current.getContext('2d');
         const areaGradient = ctxLine.createLinearGradient(0, 0, 0, 320);
-        areaGradient.addColorStop(0, 'rgba(245, 158, 11, 0.4)');
-        areaGradient.addColorStop(1, 'rgba(245, 158, 11, 0.0)');
-        
+        areaGradient.addColorStop(0, 'rgba(245, 158, 11, 0.65)');
+        areaGradient.addColorStop(1, 'rgba(245, 158, 11, 0.05)');
         lineInstance.current = new Chart(ctxLine, {
             type: 'line',
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Ventas Diarias',
+                    label: 'Ventas Diarias (Densidad)',
                     data: dataValues,
                     borderColor: '#f59e0b',
                     backgroundColor: areaGradient,
                     borderWidth: 3,
-                    tension: 0.4, // Suavizado para "parábolas"
+                    tension: 0.45,
                     fill: true,
-                    pointRadius: 5,
-                    pointHoverRadius: 8,
-                    pointBackgroundColor: '#fff',
-                    pointBorderColor: '#f59e0b',
-                    pointBorderWidth: 2,
+                    pointStyle: 'triangle',
+                    pointRadius: 7,
+                    pointHoverRadius: 10,
+                    pointRotation: (ctx) => growthRates[ctx.dataIndex] >= 0 ? 0 : 180,
+                    pointBackgroundColor: (ctx) => {
+                        const g = growthRates[ctx.dataIndex];
+                        return g >= 0 ? '#10b981' : '#f43f5e';
+                    },
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2.5,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    y: { 
-                        beginAtZero: true, 
-                        grid: { color: '#f1f5f9', borderDash: [5, 5] }, 
-                        ticks: { callback: v => '$' + (v/1000) + 'k', font: {size: 10} },
-                        border: { display: false }
-                    },
-                    x: { 
-                        grid: { display: false }, 
-                        ticks: { font: {size: 10} } 
-                    }
-                },
-                layout: {
-                    padding: { top: 25, left: 0, right: 0, bottom: 0 }
+                    y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + (v/1000) + 'k' } },
+                    x: { grid: { display: false }, ticks: { font: {size: 10} } }
                 },
                 plugins: { 
-                    legend: { display: false },
+                    legend: { display: true, position: 'top' },
                     datalabels: {
-                        align: 'top',
-                        offset: 4,
-                        font: { size: 9, weight: 'bold' },
-                        color: (ctx) => {
-                            const val = growthRates[ctx.dataIndex];
-                            return val >= 0 ? '#10b981' : '#f43f5e';
-                        },
-                        formatter: (value, ctx) => {
-                            if (ctx.dataIndex === 0) return '';
-                            const pct = growthRates[ctx.dataIndex];
-                            // Mostrar solo si el cambio es relevante para evitar desorden, o siempre si hay espacio
-                            if (Math.abs(pct) < 1) return ''; // Ocultar cambios muy pequeños
-                            return (pct > 0 ? '+' : '') + pct.toFixed(0) + '%';
-                        }
+                      anchor: 'end',
+                      align: 'top',
+                      offset: 4,
+                      font: {
+                        size: 10,
+                        weight: 'bold'
+                      },
+                      formatter: (value, ctx) => {
+                        const idx = ctx.dataIndex;
+                        if (idx === 0) return null;
+                        const g = growthRates[idx];
+                        const sign = g >= 0 ? '+' : '';
+                        return sign + g.toFixed(1) + '%';
+                      },
+                      color: (ctx) => {
+                        const g = growthRates[ctx.dataIndex];
+                        return g >= 0 ? '#10b981' : '#f43f5e';
+                      }
                     },
                     tooltip: {
-                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                        padding: 12,
-                        titleFont: { size: 13 },
-                        bodyFont: { size: 13 },
                         callbacks: {
                             label: (context) => {
                                 let label = 'Venta: ';
@@ -629,7 +614,7 @@ export default function App() {
                                     const growth = growthRates[idx];
                                     const icon = growth >= 0 ? '▲' : '▼';
                                     const sign = growth >= 0 ? '+' : '';
-                                    label += `  ${icon} ${sign}${growth.toFixed(1)}%`;
+                                    label += `  ${icon} ${sign}${growth.toFixed(1)}% vs ayer`;
                                 }
                                 return label;
                             }
