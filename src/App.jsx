@@ -1,3 +1,4 @@
+```jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -379,7 +380,12 @@ export default function App() {
       loadScript("https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"),
       loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"),
       loadScript("https://unpkg.com/@phosphor-icons/web")
-    ]).then(() => updateCharts());
+    ]).then(() => {
+      if (window.Chart && window.ChartDataLabels) {
+        window.Chart.register(window.ChartDataLabels);
+      }
+      updateCharts();
+    });
   }, []);
 
   useEffect(() => {
@@ -430,7 +436,7 @@ export default function App() {
              }
           },
           plugins: { legend: { display: false }, tooltip: { enabled: false }, datalabels: {
-            color: '#fff',
+            color: '#333',
             font: { weight: 'bold', size: 10 },
             formatter: (value) => formatCurrency(value),
             anchor: 'end',
@@ -516,9 +522,9 @@ export default function App() {
                 },
                 color: (ctx) => {
                   const index = ctx.dataIndex;
-                  if (index === 0) return '#000';
+                  if (index === 0) return '#333';
                   const prev = ctx.dataset.data[index - 1];
-                  if (prev === 0) return '#000';
+                  if (prev === 0) return '#333';
                   const pct = ((ctx.dataset.data[index] - prev) / prev) * 100;
                   return pct >= 0 ? '#10b981' : '#f43f5e';
                 }
@@ -614,7 +620,9 @@ export default function App() {
                         return '$' + (value / 1000).toFixed(0) + 'k' + gStr;
                       },
                       color: (ctx) => {
-                        const g = growthRates[ctx.dataIndex];
+                        const idx = ctx.dataIndex;
+                        if (idx === 0) return '#333';
+                        const g = growthRates[idx];
                         return g >= 0 ? '#10b981' : '#f43f5e';
                       }
                     },
@@ -1273,3 +1281,4 @@ export default function App() {
     </>
   );
 }
+```
