@@ -429,7 +429,14 @@ export default function App() {
                  setHoveredAgent(null);
              }
           },
-          plugins: { legend: { display: false }, tooltip: { enabled: false } }
+          plugins: { legend: { display: false }, tooltip: { enabled: false }, datalabels: {
+            color: '#fff',
+            font: { weight: 'bold', size: 10 },
+            formatter: (value) => formatCurrency(value),
+            anchor: 'end',
+            align: 'end',
+            offset: 4
+          } }
         }
       });
     }
@@ -496,18 +503,22 @@ export default function App() {
                 formatter: (value, ctx) => {
                   if (ctx.dataset.type === 'line') return null;
                   const index = ctx.dataIndex;
-                  if (index === 0) return null;
-                  const prev = ctx.dataset.data[index - 1];
-                  if (prev === 0) return null;
-                  const pct = ((value - prev) / prev) * 100;
-                  const sign = pct >= 0 ? '+' : '';
-                  return sign + pct.toFixed(1) + '%';
+                  let pctStr = '';
+                  if (index > 0) {
+                    const prev = ctx.dataset.data[index - 1];
+                    if (prev !== 0) {
+                      const pct = ((value - prev) / prev) * 100;
+                      const sign = pct >= 0 ? '+' : '';
+                      pctStr = '\n' + sign + pct.toFixed(1) + '%';
+                    }
+                  }
+                  return '$' + (value / 1000).toFixed(0) + 'k' + pctStr;
                 },
                 color: (ctx) => {
                   const index = ctx.dataIndex;
-                  if (index === 0) return null;
+                  if (index === 0) return '#000';
                   const prev = ctx.dataset.data[index - 1];
-                  if (prev === 0) return null;
+                  if (prev === 0) return '#000';
                   const pct = ((ctx.dataset.data[index] - prev) / prev) * 100;
                   return pct >= 0 ? '#10b981' : '#f43f5e';
                 }
@@ -594,10 +605,13 @@ export default function App() {
                       },
                       formatter: (value, ctx) => {
                         const idx = ctx.dataIndex;
-                        if (idx === 0) return null;
-                        const g = growthRates[idx];
-                        const sign = g >= 0 ? '+' : '';
-                        return sign + g.toFixed(1) + '%';
+                        let gStr = '';
+                        if (idx > 0) {
+                          const g = growthRates[idx];
+                          const sign = g >= 0 ? '+' : '';
+                          gStr = '\n' + sign + g.toFixed(1) + '%';
+                        }
+                        return '$' + (value / 1000).toFixed(0) + 'k' + gStr;
                       },
                       color: (ctx) => {
                         const g = growthRates[ctx.dataIndex];
