@@ -30,7 +30,7 @@ try {
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// --- UTILIDADES ---
+// --- UTILIDADES (Lógica Original Intacta) ---
 const getHolidays = (year) => {
   const fixedHolidays = [
     `${year}-01-01`, `${year}-01-09`, `${year}-05-01`, `${year}-11-03`,
@@ -85,7 +85,7 @@ const formatCurrency = (amount) => {
     }).format(amount);
 };
 
-// --- COMPONENTES ---
+// --- COMPONENTES VISUALES ---
 const AnimatedCounter = ({ value, duration = 1500, prefix = '' }) => {
     const [count, setCount] = useState(0);
     useEffect(() => {
@@ -109,7 +109,7 @@ const AnimatedCounter = ({ value, duration = 1500, prefix = '' }) => {
     return <span>{prefix}{count.toLocaleString('es-PA')}</span>;
 };
 
-const CircularProgress = ({ value, max, color = "text-amber-500", size = 80, strokeWidth = 8 }) => {
+const CircularProgress = ({ value, max, color = "text-blue-600", size = 64, strokeWidth = 6 }) => {
     const radius = (size - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
     const [offset, setOffset] = useState(circumference);
@@ -120,12 +120,12 @@ const CircularProgress = ({ value, max, color = "text-amber-500", size = 80, str
         return () => clearTimeout(timer);
     }, [value, max, circumference]);
     return (
-        <div className="relative flex items-center justify-center drop-shadow-md" style={{ width: size, height: size }}>
+        <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
             <svg width={size} height={size} className="transform -rotate-90">
-                <circle className="text-slate-100" strokeWidth={strokeWidth} stroke="currentColor" fill="transparent" r={radius} cx={size / 2} cy={size / 2} />
+                <circle className="text-gray-100" strokeWidth={strokeWidth} stroke="currentColor" fill="transparent" r={radius} cx={size / 2} cy={size / 2} />
                 <circle className={`${color} transition-all duration-[1500ms] ease-out`} strokeWidth={strokeWidth} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" stroke="currentColor" fill="transparent" r={radius} cx={size / 2} cy={size / 2} />
             </svg>
-            <div className="absolute text-xs font-black text-slate-700">
+            <div className="absolute text-[10px] font-bold text-gray-600">
                 {Math.round((value / max) * 100)}%
             </div>
         </div>
@@ -133,6 +133,7 @@ const CircularProgress = ({ value, max, color = "text-amber-500", size = 80, str
 };
 
 const Podium = ({ agents }) => {
+    // Top 3 agents
     const top3 = [
         agents[1] || { name: 'Vacante', sales: 0 },
         agents[0] || { name: 'Vacante', sales: 0 },
@@ -140,35 +141,40 @@ const Podium = ({ agents }) => {
     ];
     
     return (
-        <div className="flex items-end justify-center gap-2 md:gap-4 h-64 w-full pt-4">
+        <div className="flex items-end justify-center gap-4 h-60 w-full pt-4 px-4">
             {top3.map((agent, index) => {
                 let rank = 0;
-                let colorClass = '';
-                let icon = '';
-                let delay = '';
-                if (index === 1) { rank = 2; colorClass = 'from-indigo-400 to-indigo-600 shadow-indigo-500/30'; icon = 'ph-medal'; delay = 'delay-300'; }
-                else if (index === 0) { rank = 1; colorClass = 'from-amber-400 to-amber-500 shadow-amber-500/40'; icon = 'ph-crown'; delay = 'delay-500'; }
-                else { rank = 3; colorClass = 'from-slate-400 to-slate-500 shadow-slate-400/30'; icon = 'ph-medal'; delay = 'delay-700'; }
+                let bgClass = '';
+                let textClass = '';
+                let height = '';
                 
-                const heightClass = index === 1 ? 'h-[75%]' : (index === 0 ? 'h-[90%]' : 'h-[60%]');
-                const initials = getInitials(agent.name);
-
+                if (index === 1) { 
+                    rank = 2; 
+                    bgClass = 'bg-gray-100 border-t-4 border-gray-400'; 
+                    textClass = 'text-gray-600';
+                    height = 'h-32'; 
+                } else if (index === 0) { 
+                    rank = 1; 
+                    bgClass = 'bg-yellow-50 border-t-4 border-yellow-400 shadow-lg shadow-yellow-100'; 
+                    textClass = 'text-yellow-700';
+                    height = 'h-40'; 
+                } else { 
+                    rank = 3; 
+                    bgClass = 'bg-orange-50 border-t-4 border-orange-300'; 
+                    textClass = 'text-orange-700';
+                    height = 'h-24'; 
+                }
+                
                 return (
-                    <div key={index} className={`flex flex-col items-center justify-end w-24 md:w-32 group ${heightClass} transition-transform hover:scale-105 duration-300`}>
-                        <div className={`mb-3 flex flex-col items-center transition-all duration-700 opacity-0 animate-fade-in-down ${delay} fill-mode-forwards z-10`}>
-                             <div className="w-10 h-10 rounded-full bg-white border-2 border-slate-100 shadow-md flex items-center justify-center text-xs font-bold text-slate-600 mb-2">
-                                {initials}
-                             </div>
-                            <div className="font-bold text-slate-700 text-xs md:text-sm text-center line-clamp-1 w-24">{agent.name.split(' ')[0]}</div>
-                            <div className="font-black text-slate-900 text-xs md:text-sm bg-white/50 px-2 py-0.5 rounded-full backdrop-blur-sm mt-1 border border-white/40">
+                    <div key={index} className="flex flex-col items-center w-24 md:w-32">
+                        <div className="mb-2 flex flex-col items-center">
+                            <span className="text-xs font-bold text-gray-500 mb-1 line-clamp-1">{agent.name.split(' ')[0]}</span>
+                            <span className="font-bold text-gray-800 text-sm bg-white px-2 py-0.5 rounded shadow-sm border border-gray-100">
                                 <AnimatedCounter value={agent.sales} prefix="$" />
-                            </div>
+                            </span>
                         </div>
-                        <div className={`w-full h-full rounded-t-2xl bg-gradient-to-t ${colorClass} shadow-lg relative flex items-end justify-center pb-4 transition-all duration-1000 transform scale-y-0 animate-grow-up origin-bottom podium-bar`}>
-                            <div className="absolute top-0 -mt-3 w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center font-black text-slate-800 text-sm border-2 border-slate-50">
-                                #{rank}
-                            </div>
-                            <i className={`ph-fill ${icon} text-white/30 text-4xl absolute bottom-3`}></i>
+                        <div className={`w-full ${height} rounded-t-lg ${bgClass} flex items-end justify-center pb-3 relative transition-all hover:opacity-90`}>
+                            <span className={`text-3xl font-black opacity-30 ${textClass}`}>#{rank}</span>
                         </div>
                     </div>
                 );
@@ -181,10 +187,10 @@ const Notification = ({ message, type, onClose }) => {
   if (!message) return null;
   const isError = type === 'error';
   return (
-    <div className={`fixed top-6 right-6 z-[200] p-4 rounded-xl shadow-2xl border flex items-center gap-3 animate-fade-in-down transition-all transform ${isError ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
-      <i className={`ph-fill text-xl ${isError ? 'ph-warning-circle' : 'ph-check-circle'}`}></i>
-      <span className="font-bold text-sm">{message}</span>
-      <button onClick={onClose} className="ml-2 opacity-50 hover:opacity-100"><i className="ph-bold ph-x"></i></button>
+    <div className={`fixed bottom-6 right-6 z-[200] px-6 py-4 rounded-lg shadow-xl border flex items-center gap-3 animate-fade-in-up transition-all ${isError ? 'bg-red-50 border-red-100 text-red-800' : 'bg-gray-900 border-gray-800 text-white'}`}>
+      <i className={`ph-fill text-xl ${isError ? 'ph-warning-circle' : 'ph-check-circle text-green-400'}`}></i>
+      <span className="font-medium text-sm">{message}</span>
+      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100"><i className="ph-bold ph-x"></i></button>
     </div>
   );
 };
@@ -193,23 +199,19 @@ const ConfirmModal = ({ isOpen, onCancel, onConfirm, title, message }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onCancel}></div>
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-100 animate-scale-in">
-        <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-4 text-2xl">
-          <i className="ph-fill ph-warning"></i>
-        </div>
-        <h3 className="text-xl font-bold text-slate-900 mb-2">{title}</h3>
-        <p className="text-slate-600 text-sm mb-6 leading-relaxed">{message}</p>
+      <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm" onClick={onCancel}></div>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-scale-in">
+        <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
+        <p className="text-gray-500 text-sm mb-6 leading-relaxed">{message}</p>
         <div className="flex gap-3 justify-end">
-          <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold rounded-lg text-sm transition-colors">Cancelar</button>
-          <button onClick={onConfirm} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm shadow-lg shadow-amber-500/20 transition-all">Sí, actualizar</button>
+          <button onClick={onCancel} className="px-4 py-2 text-gray-500 hover:bg-gray-50 font-medium rounded-lg text-sm transition-colors">Cancelar</button>
+          <button onClick={onConfirm} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm shadow-md transition-all">Sí, actualizar</button>
         </div>
       </div>
     </div>
   );
 };
 
-// Login simplificado y elegante
 const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -230,50 +232,30 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-slate-900">
-       <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[100px]"></div>
-          <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-amber-600/10 rounded-full blur-[100px]"></div>
-       </div>
-      
-      <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl relative z-10">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+      <div className="w-full max-w-sm bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-amber-500/30 transform rotate-3">
-             <i className="ph-bold ph-chart-polar text-white text-3xl transform -rotate-3"></i>
+          <div className="w-12 h-12 bg-blue-600 rounded-xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30">
+             <i className="ph-bold ph-chart-polar text-white text-2xl"></i>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Tablero Directivo</h1>
-          <p className="text-slate-400 text-sm">Inicia sesión para acceder a las métricas</p>
+          <h1 className="text-xl font-bold text-gray-900">Bienvenido</h1>
+          <p className="text-gray-400 text-sm">Panel de Control de Ventas</p>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <div className="p-3 bg-rose-500/20 border border-rose-500/30 rounded-lg text-rose-200 text-xs text-center">{error}</div>}
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-400 ml-1">USUARIO</label>
-            <div className="relative">
-                <i className="ph-fill ph-user absolute left-3 top-3 text-slate-500"></i>
-                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-slate-800/50 border border-slate-700 text-white text-sm rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:border-amber-500 transition-colors" placeholder="ejemplo@empresa.com" />
-            </div>
+          {error && <div className="p-3 bg-red-50 text-red-600 text-xs rounded-lg text-center font-medium">{error}</div>}
+          <div>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Email</label>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full mt-1 bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg py-2.5 px-4 focus:outline-none focus:border-blue-500 focus:bg-white transition-all" />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-400 ml-1">CONTRASEÑA</label>
-             <div className="relative">
-                <i className="ph-fill ph-lock-key absolute left-3 top-3 text-slate-500"></i>
-                <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-slate-800/50 border border-slate-700 text-white text-sm rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:border-amber-500 transition-colors" placeholder="••••••••" />
-            </div>
+          <div>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Contraseña</label>
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full mt-1 bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg py-2.5 px-4 focus:outline-none focus:border-blue-500 focus:bg-white transition-all" />
           </div>
-          <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-amber-500/20 transition-all transform hover:scale-[1.02] active:scale-[0.98]">{loading ? 'Cargando...' : (isRegistering ? 'Crear Cuenta' : 'Entrar al Tablero')}</button>
+          <button type="submit" disabled={loading} className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-lg shadow-lg transition-all">{loading ? '...' : (isRegistering ? 'Registrar' : 'Entrar')}</button>
         </form>
-
-        <div className="mt-8 flex flex-col gap-3">
-           <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-white/10"></div>
-                <span className="flex-shrink mx-4 text-slate-500 text-xs">O continúa como</span>
-                <div className="flex-grow border-t border-white/10"></div>
-            </div>
-           <button onClick={onLoginGuest} className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-slate-300 text-sm font-medium transition-all flex items-center justify-center gap-2 hover:text-white">
-             <i className="ph-bold ph-ghost"></i> Acceso Invitado
-           </button>
-           <button onClick={() => { setIsRegistering(!isRegistering); setError(''); }} className="text-xs text-slate-500 hover:text-amber-400 text-center mt-2 underline decoration-slate-700 underline-offset-4">{isRegistering ? '¿Ya tienes cuenta? Iniciar sesión' : '¿No tienes cuenta? Regístrate'}</button>
+        <div className="mt-6 pt-6 border-t border-gray-100 space-y-3">
+           <button onClick={onLoginGuest} className="w-full py-2.5 text-gray-500 hover:text-gray-700 text-sm font-medium transition-all flex items-center justify-center gap-2">Acceso Invitado</button>
+           <button onClick={() => { setIsRegistering(!isRegistering); setError(''); }} className="w-full text-xs text-blue-600 hover:text-blue-700 text-center font-medium">{isRegistering ? 'Volver a Login' : 'Crear nueva cuenta'}</button>
         </div>
       </div>
     </div>
@@ -281,20 +263,19 @@ const LoginScreen = ({ onLoginGuest, onLoginEmail }) => {
 };
 
 export default function App() {
+  // Estados
   const [metrics, setMetrics] = useState({ agents: [], annual: [], daily: [], categories: [], currentYear: 0, currentMonthName: '', rawData: [] });
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [dataLoading, setDataLoading] = useState(false);
   const [view, setView] = useState('dashboard');
   const [isUploading, setIsUploading] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
   const [notification, setNotification] = useState(null);
   const [hoveredAgent, setHoveredAgent] = useState(null);
-  
-  // Sidebar toggle for mobile
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
+  
+  // Refs para gráficos y archivos
   const pieChartRef = useRef(null);
   const barChartRef = useRef(null);
   const lineChartRef = useRef(null);
@@ -302,13 +283,16 @@ export default function App() {
   const barInstance = useRef(null);
   const lineInstance = useRef(null);
   const fileInputRef = useRef(null);
+  
   const [businessDays, setBusinessDays] = useState({ total: 25, elapsed: 10 });
 
+  // Notificaciones
   const showNotification = (msg, type = 'success') => {
     setNotification({ message: msg, type });
     setTimeout(() => setNotification(null), 5000);
   };
 
+  // Auth Effect
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -319,6 +303,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Handlers Login
   const handleLoginGuest = async () => {
     setLoading(true);
     try {
@@ -334,11 +319,8 @@ export default function App() {
   };
 
   const handleLoginEmail = async (email, password, isRegistering) => {
-    if (isRegistering) {
-      await createUserWithEmailAndPassword(auth, email, password);
-    } else {
-      await signInWithEmailAndPassword(auth, email, password);
-    }
+    if (isRegistering) await createUserWithEmailAndPassword(auth, email, password);
+    else await signInWithEmailAndPassword(auth, email, password);
   };
 
   const handleLogout = async () => {
@@ -348,10 +330,9 @@ export default function App() {
     } catch (error) { console.error(error); }
   };
 
-  // Lectura de datos
+  // Carga de Datos Firebase
   useEffect(() => {
     if (!user) return;
-    setDataLoading(true);
     const dataRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
     const unsubscribe = onSnapshot(dataRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -365,15 +346,12 @@ export default function App() {
             currentMonthName: data.currentMonthName || '',
             rawData: data.rawData || []
         });
-      } else {
-        setMetrics({ agents: [], annual: [], daily: [], categories: [], currentYear: new Date().getFullYear(), currentMonthName: '', rawData: [] });
       }
-      setDataLoading(false);
-    }, (error) => setDataLoading(false));
+    });
     return () => unsubscribe();
   }, [user]);
 
-  // Scripts externos
+  // Scripts Charts
   useEffect(() => {
     const tailwindConfigScript = document.createElement('script');
     tailwindConfigScript.text = `
@@ -381,24 +359,13 @@ export default function App() {
         theme: {
           extend: {
             fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] },
-            colors: { 
-                slate: { 850: '#151F32', 900: '#0f172a' }, 
-                indigo: { 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 900: '#312e81' },
-                amber: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' } 
-            },
             animation: {
-              'fade-in': 'fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
-              'fade-in-down': 'fadeInDown 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
-              'grow-up': 'growUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-              'scale-in': 'scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'fade-in-up': 'fadeInUp 0.5s ease-out',
+              'scale-in': 'scaleIn 0.3s ease-out',
             },
             keyframes: {
-              fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
-              fadeInDown: { '0%': { opacity: '0', transform: 'translateY(-10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-              growUp: { '0%': { transform: 'scaleY(0)' }, '100%': { transform: 'scaleY(1)' } },
+              fadeInUp: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
               scaleIn: { '0%': { opacity: '0', transform: 'scale(0.95)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
-              shine: { '0%': { transform: 'translateX(-100%) skewX(-30deg)' }, '100%': { transform: 'translateX(400%) skewX(-30deg)' } }
             }
           }
         }
@@ -406,10 +373,10 @@ export default function App() {
     `;
     document.head.appendChild(tailwindConfigScript);
     
-    const loadScript = (src) => new Promise((resolve, reject) => {
+    const loadScript = (src) => new Promise((resolve) => {
         if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
         const script = document.createElement('script');
-        script.src = src; script.onload = resolve; script.onerror = reject;
+        script.src = src; script.onload = resolve;
         document.head.appendChild(script);
     });
 
@@ -419,9 +386,7 @@ export default function App() {
       loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"),
       loadScript("https://unpkg.com/@phosphor-icons/web")
     ]).then(() => {
-      if (window.Chart && window.ChartDataLabels) {
-        window.Chart.register(window.ChartDataLabels);
-      }
+      if (window.Chart && window.ChartDataLabels) window.Chart.register(window.ChartDataLabels);
       updateCharts();
     });
   }, []);
@@ -433,13 +398,10 @@ export default function App() {
 
   const updateCharts = () => {
     if (typeof Chart === 'undefined') return;
-    
-    // Configuración Global ChartJS
     Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
-    Chart.defaults.color = "#64748b";
-    Chart.defaults.scale.grid.color = "#f1f5f9";
-
-    // 1. PIE CHART (Ventas por Asesor - Año Actual)
+    Chart.defaults.color = "#94a3b8";
+    
+    // 1. PIE CHART (Donut limpio)
     if (pieChartRef.current && metrics.agents.length > 0) {
       if (pieInstance.current) pieInstance.current.destroy();
       const processedAgents = [...metrics.agents].sort((a, b) => b.sales - a.sales);
@@ -450,84 +412,59 @@ export default function App() {
           labels: processedAgents.map(a => a.name.split(' ')[0]),
           datasets: [{
             data: processedAgents.map(a => a.sales),
-            backgroundColor: ['#4f46e5', '#f59e0b', '#0f172a', '#fbbf24', '#94a3b8', '#cbd5e1'],
+            backgroundColor: ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#e2e8f0'],
             borderWidth: 0,
-            hoverOffset: 10,
-            borderRadius: 0,
+            hoverOffset: 4,
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          cutout: '75%',
-          layout: { padding: 10 },
-          onHover: (event, elements) => {
-             if (elements && elements.length > 0) {
-                 const index = elements[0].index;
-                 setHoveredAgent({
-                     name: processedAgents[index].name.split(' ')[0],
-                     sales: processedAgents[index].sales
-                 });
-             } else {
-                 setHoveredAgent(null);
-             }
-          },
-          plugins: { legend: { display: false }, tooltip: { enabled: false }, datalabels: { display: false } }
+          cutout: '80%',
+          plugins: { legend: { display: false }, tooltip: { enabled: false }, datalabels: { display: false } },
+          onHover: (e, elements) => {
+              if (elements && elements.length > 0) {
+                  const idx = elements[0].index;
+                  setHoveredAgent({ name: processedAgents[idx].name, sales: processedAgents[idx].sales });
+              } else { setHoveredAgent(null); }
+          }
         }
       });
     }
 
-    // 2. BAR CHART (Evolución Histórica - ÚLTIMOS 3 AÑOS)
+    // 2. BAR CHART (Evolución)
     if (barChartRef.current && metrics.annual.length > 0) {
       if (barInstance.current) barInstance.current.destroy();
-      
-      // Filtrar últimos 3 años explícitamente
       let sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
       if (sortedYears.length > 3) sortedYears = sortedYears.slice(-3);
       
       const yearsLabels = sortedYears.map(y => y.year);
-      
-      // Construir datasets dinámicos por agente
       const allAgentsSet = new Set();
-      sortedYears.forEach(yearData => {
-          if (yearData.agents) Object.keys(yearData.agents).forEach(agent => allAgentsSet.add(agent));
-      });
+      sortedYears.forEach(y => { if(y.agents) Object.keys(y.agents).forEach(a => allAgentsSet.add(a)); });
       const allAgents = Array.from(allAgentsSet);
       
-      const colors = ['#4f46e5', '#f59e0b', '#1e293b', '#fbbf24', '#94a3b8', '#6366f1'];
-      const datasets = [];
+      const colors = ['#1e293b', '#334155', '#475569', '#64748b', '#94a3b8'];
+      const datasets = allAgents.map((agent, i) => ({
+          label: agent.split(' ')[0],
+          data: sortedYears.map(y => y.agents ? (y.agents[agent] || 0) : 0),
+          backgroundColor: colors[i % colors.length],
+          borderRadius: 4,
+          barThickness: 40,
+      }));
       
-      allAgents.forEach((agent, index) => {
-          const data = sortedYears.map(yearData => yearData.agents ? (yearData.agents[agent] || 0) : 0);
-          datasets.push({
-              label: agent.split(' ')[0],
-              data: data,
-              backgroundColor: colors[index % colors.length],
-              borderRadius: 4,
-              barThickness: 30,
-              maxBarThickness: 40,
-          });
-      });
-      
-      // Datos sin desglose (legacy)
-      const unknownData = sortedYears.map(yearData => !yearData.agents ? yearData.total : 0);
-      if (unknownData.some(v => v > 0)) {
-           datasets.push({ label: 'Otros', data: unknownData, backgroundColor: '#e2e8f0', borderRadius: 4, barThickness: 30 });
-      }
+      const unknownData = sortedYears.map(y => !y.agents ? y.total : 0);
+      if (unknownData.some(v => v > 0)) datasets.push({ label: 'Otros', data: unknownData, backgroundColor: '#e2e8f0', borderRadius: 4, barThickness: 40 });
 
-      // Meta Lineal
-      const annualGoal = 15000 * 12;
       datasets.push({
-          label: 'Meta Anual',
-          data: sortedYears.map(() => annualGoal),
+          label: 'Meta',
+          data: sortedYears.map(() => 15000 * 12),
           type: 'line',
-          borderColor: '#e11d48',
+          borderColor: '#ef4444',
           borderWidth: 2,
-          borderDash: [5, 5],
+          borderDash: [5,5],
           pointRadius: 0,
-          fill: false,
           order: 0,
-          datalabels: { display: false } // No mostrar label en la linea
+          datalabels: { display: false }
       });
 
       const ctxBar = barChartRef.current.getContext('2d');
@@ -538,122 +475,54 @@ export default function App() {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            y: { beginAtZero: true, stacked: false, grid: { borderDash: [4, 4], drawBorder: false }, ticks: { callback: v => '$' + v/1000 + 'k', font: {size: 10} }, border: { display: false } },
-            x: { stacked: false, grid: { display: false }, ticks: { font: {weight: 'bold'} } }
+              y: { display: false, stacked: false },
+              x: { grid: { display: false }, ticks: { font: { weight: 'bold' }, color: '#334155' } }
           },
           plugins: { 
-              legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: {size: 11} } },
-              datalabels: {
-                anchor: 'end',
-                align: 'end',
-                font: { size: 10, weight: 'bold' },
-                formatter: (value) => '$' + (value / 1000).toFixed(0) + 'k',
-                color: '#64748b'
-              },
-              tooltip: {
-                  backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                  titleFont: { family: 'Plus Jakarta Sans', size: 13 },
-                  bodyFont: { family: 'Plus Jakarta Sans', size: 12 },
-                  padding: 10,
-                  cornerRadius: 8,
-                  displayColors: true,
-                  callbacks: {
-                      label: (context) => {
-                          let label = context.dataset.label || '';
-                          if (label) label += ': ';
-                          label += new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(context.parsed.y);
-                          return label;
-                      }
-                  }
-              }
+              legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 6 } },
+              datalabels: { anchor: 'end', align: 'end', formatter: v => '$'+(v/1000).toFixed(0)+'k', font: { weight: 'bold', size: 10 }, color: '#64748b' }
           }
         }
       });
     }
 
-    // 3. LINE CHART (Ventas Diarias - Mes Actual)
+    // 3. LINE CHART (Tendencia)
     if (lineChartRef.current && metrics.daily.length > 0) {
         if (lineInstance.current) lineInstance.current.destroy();
-        const dailyDataPoints = metrics.daily; 
-        const labels = dailyDataPoints.map(d => parseInt(d.date.split('-')[2])); // Solo el día
-        const dataValues = dailyDataPoints.map(d => d.total);
-        
+        const dataValues = metrics.daily.map(d => d.total);
+        const labels = metrics.daily.map(d => parseInt(d.date.split('-')[2]));
         const ctxLine = lineChartRef.current.getContext('2d');
-        const gradient = ctxLine.createLinearGradient(0, 0, 0, 300);
-        gradient.addColorStop(0, 'rgba(79, 70, 229, 0.2)'); // Indigo
-        gradient.addColorStop(1, 'rgba(79, 70, 229, 0.0)');
+        const gradient = ctxLine.createLinearGradient(0,0,0,200);
+        gradient.addColorStop(0, 'rgba(37, 99, 235, 0.1)');
+        gradient.addColorStop(1, 'rgba(37, 99, 235, 0)');
 
         lineInstance.current = new Chart(ctxLine, {
             type: 'line',
             data: {
-                labels: labels,
+                labels,
                 datasets: [{
-                    label: 'Venta',
                     data: dataValues,
-                    borderColor: '#4f46e5',
+                    borderColor: '#2563eb',
                     backgroundColor: gradient,
                     borderWidth: 2,
                     tension: 0.4,
                     fill: true,
-                    pointBackgroundColor: '#fff',
-                    pointBorderColor: '#4f46e5',
-                    pointBorderWidth: 2,
-                    pointRadius: 4,
-                    pointHoverRadius: 6
+                    pointRadius: 0,
+                    pointHoverRadius: 4
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true, grid: { borderDash: [4, 4], color: '#f1f5f9' }, ticks: { callback: v => '$' + (v/1000) + 'k', font: {size: 10} } },
-                    x: { grid: { display: false }, ticks: { font: {size: 10} } }
-                },
-                plugins: { 
-                    legend: { display: false },
-                    datalabels: { display: false },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                        padding: 10,
-                        callbacks: {
-                            label: (context) => new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(context.parsed.y)
-                        }
-                    }
-                }
+                scales: { x: { display: false }, y: { display: false } },
+                plugins: { legend: { display: false }, datalabels: { display: false } }
             }
         });
     }
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (metrics.agents.length > 0) {
-      setPendingFile(file);
-      setShowConfirmModal(true);
-      e.target.value = ''; 
-    } else {
-      processFile(file);
-      e.target.value = ''; 
-    }
-  };
-
-  const deleteYear = async (yearToDelete) => {
-    if (!user) return;
-    try {
-        const updatedAnnual = metrics.annual.filter(item => item.year !== yearToDelete);
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
-        await updateDoc(docRef, { annual: updatedAnnual });
-        showNotification(`Año ${yearToDelete} eliminado del histórico`, 'success');
-    } catch (err) {
-        showNotification("Error al eliminar año: " + err.message, 'error');
-    }
-  };
-
   const processFile = (file) => {
-    if (typeof XLSX === 'undefined') { showNotification("Librería Excel no lista", 'error'); return; }
+    if (typeof XLSX === 'undefined') { showNotification("Error librería", 'error'); return; }
     setIsUploading(true);
     const reader = new FileReader();
     reader.onload = async function(e) {
@@ -663,7 +532,6 @@ export default function App() {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false, dateNF: 'yyyy-mm-dd'});
         
-        // Mapeo Inteligente de Columnas
         let colIndices = { name: -1, sales: -1, date: -1, category: -1, quantity: -1 }; 
         const headers = jsonData[0]; 
         if (headers && Array.isArray(headers)) {
@@ -676,15 +544,11 @@ export default function App() {
             if (colIndices.quantity === -1 && (txt.includes('cantidad') || txt.includes('cant'))) colIndices.quantity = idx;
           });
         }
-        if (colIndices.name === -1 || colIndices.sales === -1 || colIndices.date === -1) throw new Error("Faltan columnas requeridas (Asesor, Venta, Fecha)");
+        if (colIndices.name === -1 || colIndices.sales === -1 || colIndices.date === -1) throw new Error("Faltan columnas requeridas");
 
-        // Estructuras de Datos
         const annualMap = new Map();
-        // Cargar histórico existente para no perderlo
         if (metrics.annual && Array.isArray(metrics.annual)) {
-            metrics.annual.forEach(item => {
-                annualMap.set(item.year, { total: item.total, agents: item.agents || {} });
-            });
+            metrics.annual.forEach(item => annualMap.set(item.year, { total: item.total, agents: item.agents || {} }));
         }
         
         const dailyMap = new Map();
@@ -695,51 +559,36 @@ export default function App() {
         let maxDateTimestamp = 0;
         const yearsInFile = new Set();
 
-        // Primera Pasada: Detectar Años y Fecha Máxima
         for(let i = 1; i < jsonData.length; i++) {
             const row = jsonData[i];
             if (!row) continue;
             const rawDate = row[colIndices.date];
             if (rawDate) {
-                 let dateObj = null;
-                 if (rawDate instanceof Date) dateObj = rawDate;
-                 else if (typeof rawDate === 'string') dateObj = new Date(rawDate);
-                 
+                 let dateObj = rawDate instanceof Date ? rawDate : new Date(rawDate);
                  if (dateObj && !isNaN(dateObj.getTime())) {
                      yearsInFile.add(dateObj.getFullYear());
                      if (dateObj.getTime() > maxDateTimestamp) maxDateTimestamp = dateObj.getTime();
                  }
             }
         }
-        
-        // Inicializar años nuevos detectados en el mapa anual
-        yearsInFile.forEach(y => {
-            if (!annualMap.has(y)) annualMap.set(y, { total: 0, agents: {} });
-        });
+        yearsInFile.forEach(y => { if (!annualMap.has(y)) annualMap.set(y, { total: 0, agents: {} }); });
 
-        // Configurar "Año Actual" basado en los datos (El año más reciente del archivo)
         const maxDate = maxDateTimestamp > 0 ? new Date(maxDateTimestamp) : new Date();
         const currentYear = maxDate.getFullYear();
         const currentMonth = maxDate.getMonth();
-        const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-        const currentMonthName = monthNames[currentMonth];
+        const currentMonthName = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"][currentMonth];
 
-        // Segunda Pasada: Procesar Datos
         for(let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i];
           if (!row || !row[colIndices.name]) continue;
           
-          // Limpieza de valor venta
           let salesVal = 0;
           const rawSales = row[colIndices.sales];
           if (typeof rawSales === 'number') salesVal = rawSales;
           else if (typeof rawSales === 'string') salesVal = parseFloat(rawSales.replace(/[^0-9.-]+/g,"")) || 0;
           
-          // Limpieza fecha
           const rawDate = row[colIndices.date];
-          let dateObj = null;
-          if (rawDate instanceof Date) dateObj = rawDate;
-          else if (typeof rawDate === 'string') dateObj = new Date(rawDate);
+          let dateObj = rawDate instanceof Date ? rawDate : new Date(rawDate);
           if (!dateObj || isNaN(dateObj.getTime())) continue;
           
           const year = dateObj.getFullYear();
@@ -748,26 +597,20 @@ export default function App() {
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const rawName = String(row[colIndices.name]).trim();
           
-          // Guardar Raw Data (limitado)
           if (rawDataArray.length < 2000) {
               const rawCat = colIndices.category !== -1 ? String(row[colIndices.category] || "-").trim() : "-";
               const rawQty = colIndices.quantity !== -1 ? (row[colIndices.quantity] || 0) : 0;
               rawDataArray.push({ date: dateStr, agent: rawName, sales: salesVal, category: rawCat, quantity: rawQty });
           }
 
-          // 1. Acumular en Histórico (Todos los años)
           const annualEntry = annualMap.get(year);
           if (annualEntry) {
               annualEntry.total += salesVal;
-              // Acumular por agente dentro del histórico anual
-              const agentKey = rawName; 
-              annualEntry.agents[agentKey] = (annualEntry.agents[agentKey] || 0) + salesVal;
+              annualEntry.agents[rawName] = (annualEntry.agents[rawName] || 0) + salesVal;
               annualMap.set(year, annualEntry);
           }
 
-          // 2. Acumular SOLO si es el año/mes actual para el dashboard operativo
           if (year === currentYear) {
-              // Métricas por Asesor (Año Actual)
               const nameKey = rawName.toLowerCase();
               if (agentsMap.has(nameKey)) {
                 const existing = agentsMap.get(nameKey);
@@ -777,7 +620,6 @@ export default function App() {
                 agentsMap.set(nameKey, { name: rawName, sales: salesVal });
               }
               
-              // Categorías (Año Actual)
               if (colIndices.category !== -1) {
                   const rawCat = String(row[colIndices.category] || "Sin Categoría").trim();
                   let qtyVal = 0;
@@ -795,11 +637,8 @@ export default function App() {
                   }
               }
 
-              // Métricas Diarias (Mes Actual)
               if (month === currentMonth) {
                   dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + salesVal);
-                  
-                  // Para calcular el MVP del día
                   if (!dailyAgentSalesMap.has(dateStr)) dailyAgentSalesMap.set(dateStr, new Map());
                   const dayAgentMap = dailyAgentSalesMap.get(dateStr);
                   dayAgentMap.set(nameKey, (dayAgentMap.get(nameKey) || 0) + salesVal);
@@ -807,7 +646,6 @@ export default function App() {
           }
         }
 
-        // Convertir Mapas a Arrays
         const annualArray = Array.from(annualMap, ([year, data]) => ({ year, total: data.total, agents: data.agents }));
         const agentsArray = Array.from(agentsMap.values());
         const categoriesArray = Array.from(categoryMap.values());
@@ -841,7 +679,6 @@ export default function App() {
             }
         }
 
-        // Finalizar
         const days = getPanamaBusinessDays(maxDate);
         setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
         rawDataArray.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -857,32 +694,45 @@ export default function App() {
                 rawData: rawDataArray
             };
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period'), payload);
-            showNotification(`✅ Datos actualizados. Año visualizado: ${currentYear}`);
+            showNotification(`Datos actualizados: ${currentYear}`);
         }
-      } catch (err) { showNotification("Error al procesar: " + err.message, 'error'); } 
+      } catch (err) { showNotification(err.message, 'error'); } 
       finally { setIsUploading(false); setPendingFile(null); }
     };
     reader.readAsArrayBuffer(file);
   };
 
-  const confirmReplace = () => { setShowConfirmModal(false); if (pendingFile) processFile(pendingFile); };
-  const cancelReplace = () => { setShowConfirmModal(false); setPendingFile(null); };
+  const deleteYear = async (yearToDelete) => {
+    if (!user) return;
+    try {
+        const updatedAnnual = metrics.annual.filter(item => item.year !== yearToDelete);
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
+        await updateDoc(docRef, { annual: updatedAnnual });
+        showNotification(`Año ${yearToDelete} eliminado`);
+    } catch (err) { showNotification(err.message, 'error'); }
+  };
 
-  // Cálculos de KPIs
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (metrics.agents.length > 0) { setPendingFile(file); setShowConfirmModal(true); } 
+    else { processFile(file); }
+    e.target.value = ''; 
+  };
+
+  // KPIs
   const { total: daysTotal, elapsed: daysElapsed } = businessDays;
   const goalMonthAgent = 15000;
   const goalDailyAgent = daysTotal > 0 ? goalMonthAgent / daysTotal : 0;
   const goalMonthCC = goalMonthAgent * 3; 
   const goalDailyCC = goalDailyAgent * 3; 
   const paceRatio = daysTotal > 0 ? (daysElapsed / daysTotal) : 0;
-  const targetPercentToday = 1 - paceRatio; 
   
   const processedAgents = metrics.agents.map(a => ({ ...a, diff: a.sales - goalMonthAgent, percent: a.sales / goalMonthAgent })).sort((a, b) => b.sales - a.sales);
   const totalSales = processedAgents.reduce((acc, curr) => acc + curr.sales, 0);
   const goalCCToday = goalDailyCC * daysElapsed;
   const isCCAhead = totalSales >= goalCCToday;
   const top3Categories = [...metrics.categories].sort((a, b) => b.sales - a.sales).slice(0, 3);
-  const bottom3Categories = [...metrics.categories].filter(c => c.sales > 0).sort((a, b) => a.sales - b.sales).slice(0, 3);
 
   let lastDaySales = 0, growthPct = 0, bestAgentToday = { name: 'N/A', sales: 0 };
   if (metrics.daily.length > 0) {
@@ -898,373 +748,291 @@ export default function App() {
       }
   }
 
-  // Estilos CSS Base
-  const customStyles = `
-    :root { --sidebar-w: 260px; }
-    body { background-color: #f8fafc; color: #1e293b; overflow-x: hidden; }
-    .glass-panel { background: white; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02); }
-    .glass-panel-dark { background: #1e293b; border: 1px solid #334155; color: white; }
-    .sidebar-link { display: flex; items-center; gap: 12px; padding: 12px 16px; border-radius: 12px; font-weight: 600; font-size: 14px; transition: all 0.2s; color: #94a3b8; }
-    .sidebar-link:hover { background: rgba(255,255,255,0.05); color: white; }
-    .sidebar-link.active { background: #4f46e5; color: white; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
-    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-    .podium-bar { position: relative; overflow: hidden; }
-    .podium-bar::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%); transform: skewX(-20deg) translateX(-150%); transition: transform 0.5s; }
-    .podium-bar:hover::after { transform: skewX(-20deg) translateX(150%); transition: transform 1s; }
-    .metric-mini { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; text-align: center; transition: all 0.2s; }
-    .metric-mini:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border-color: #cbd5e1; }
+  const styles = `
+    .glass-effect { background: white; border: 1px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02); }
+    .nav-btn { display: flex; items-center; gap: 8px; padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: all 0.2s; }
+    .nav-btn:hover { background: #f8fafc; color: #0f172a; }
+    .nav-btn.active { background: #eff6ff; color: #2563eb; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
   `;
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><i className="ph ph-spinner animate-spin text-amber-500 text-4xl"></i></div>;
-  if (!user) return <><style>{customStyles}</style><Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} /><LoginScreen onLoginGuest={handleLoginGuest} onLoginEmail={handleLoginEmail} /></>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><i className="ph ph-spinner animate-spin text-blue-600 text-3xl"></i></div>;
+  if (!user) return <><style>{styles}</style><Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} /><LoginScreen onLoginGuest={handleLoginGuest} onLoginEmail={handleLoginEmail} /></>;
 
   return (
-    <div className="flex min-h-screen font-sans">
-      <style>{customStyles}</style>
+    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans selection:bg-blue-100">
+      <style>{styles}</style>
       <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-      {isUploading && <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center"><i className="ph ph-spinner animate-spin text-white text-4xl mb-4"></i><p className="text-white font-bold">Procesando archivo...</p></div>}
-      <ConfirmModal isOpen={showConfirmModal} title="Actualizar Datos" message="Se detectaron datos nuevos. ¿Deseas fusionarlos con el historial existente?" onCancel={cancelReplace} onConfirm={confirmReplace} />
+      
+      {/* Modals & Loaders */}
+      {isUploading && <div className="fixed inset-0 z-[300] bg-white/80 backdrop-blur-sm flex items-center justify-center"><div className="flex flex-col items-center"><i className="ph ph-arrows-clockwise animate-spin text-blue-600 text-4xl mb-3"></i><p className="font-bold text-gray-600">Procesando Datos...</p></div></div>}
+      <ConfirmModal isOpen={showConfirmModal} title="Actualizar" message="¿Fusionar datos nuevos con el historial existente?" onCancel={() => {setShowConfirmModal(false); setPendingFile(null);}} onConfirm={confirmReplace} />
       <Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} />
 
-      {/* SIDEBAR */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0 shadow-2xl flex flex-col`}>
-         <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-             <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
-                 <i className="ph-bold ph-chart-polar text-xl"></i>
-             </div>
-             <div>
-                 <h1 className="font-bold text-white text-lg leading-tight">DashBoard</h1>
-                 <p className="text-xs text-slate-400">Call Center Analytics</p>
-             </div>
-         </div>
-
-         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-             <button onClick={() => setView('dashboard')} className={`sidebar-link w-full ${view === 'dashboard' ? 'active' : ''}`}>
-                 <i className="ph-bold ph-squares-four text-lg"></i> Resumen General
-             </button>
-             <button onClick={() => setView('data')} className={`sidebar-link w-full ${view === 'data' ? 'active' : ''}`}>
-                 <i className="ph-bold ph-database text-lg"></i> Base de Datos
-             </button>
-             
-             <div className="pt-6 pb-2 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Acciones</div>
-             <label className="sidebar-link w-full cursor-pointer hover:bg-slate-800">
-                 <i className="ph-bold ph-file-arrow-up text-lg text-amber-500"></i> Importar Excel
-                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls, .csv" className="hidden" />
-             </label>
-         </nav>
-
-         <div className="p-4 border-t border-slate-800">
-             <div className="bg-slate-800 rounded-xl p-4 mb-4">
-                 <p className="text-xs text-slate-400 mb-1">Año Fiscal Actual</p>
-                 <p className="text-xl font-bold text-white">{metrics.currentYear || '---'}</p>
-             </div>
-             <button onClick={handleLogout} className="flex items-center gap-2 text-rose-400 hover:text-rose-300 text-sm font-bold w-full p-2 rounded-lg hover:bg-rose-500/10 transition-colors">
-                 <i className="ph-bold ph-sign-out"></i> Cerrar Sesión
-             </button>
-         </div>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <main className="flex-1 min-w-0 bg-slate-50/50 relative">
-        {/* MOBILE HEADER */}
-        <div className="lg:hidden p-4 bg-white border-b border-slate-200 flex items-center justify-between sticky top-0 z-40">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-slate-600 text-2xl"><i className="ph-bold ph-list"></i></button>
-            <span className="font-bold text-slate-800">Tablero Directivo</span>
-            <div className="w-8"></div>
-        </div>
-
-        <div className="p-4 lg:p-8 max-w-7xl mx-auto animate-fade-in">
-           
-           {metrics.agents.length === 0 ? (
-             <div className="h-[80vh] flex flex-col justify-center items-center text-center">
-                <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-xl mb-6 animate-bounce">
-                    <i className="ph-duotone ph-file-xls text-amber-500 text-5xl"></i>
-                </div>
-                <h2 className="text-3xl font-bold text-slate-900 mb-2">Comencemos</h2>
-                <p className="text-slate-500 max-w-md mb-8">No hay datos cargados para el periodo actual. Sube tu reporte de ventas para generar el tablero.</p>
-                <label className="cursor-pointer px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/30 flex items-center gap-2 transform hover:scale-105">
-                    <i className="ph-bold ph-upload-simple"></i> Cargar Excel
-                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls" className="hidden" />
-                </label>
-             </div>
-           ) : view === 'data' ? (
-              // VISTA DE DATOS
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="glass-panel p-6 h-fit">
-                      <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><i className="ph-fill ph-clock-counter-clockwise text-amber-500"></i> Historial Anual</h3>
-                      <div className="space-y-3">
-                        {metrics.annual.sort((a,b) => b.year - a.year).map((item) => (
-                            <div key={item.year} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 hover:bg-white hover:shadow-md transition-all">
-                                <div className="flex items-center gap-3">
-                                    <span className="font-bold text-slate-900 bg-slate-200 px-2 py-1 rounded text-xs">{item.year}</span>
-                                    <div className="flex flex-col">
-                                        <span className="text-xs font-bold text-slate-500 uppercase">Venta Total</span>
-                                        <span className="font-bold text-slate-800">{formatCurrency(item.total)}</span>
-                                    </div>
-                                </div>
-                                <button onClick={() => { if(window.confirm(`Eliminar ${item.year}?`)) deleteYear(item.year); }} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"><i className="ph-bold ph-trash"></i></button>
-                            </div>
-                        ))}
-                      </div>
-                  </div>
-                  <div className="lg:col-span-2 glass-panel p-0 overflow-hidden flex flex-col max-h-[85vh]">
-                      <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                          <h3 className="font-bold text-slate-800">Raw Data ({metrics.rawData.length})</h3>
-                          <span className="text-xs font-medium text-slate-400">Últimos 2000 registros</span>
-                      </div>
-                      <div className="overflow-auto custom-scroll flex-1 p-0">
-                          <table className="w-full text-sm text-left">
-                              <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-10 shadow-sm">
-                                  <tr>
-                                      <th className="px-6 py-3">Fecha</th>
-                                      <th className="px-6 py-3">Asesor</th>
-                                      <th className="px-6 py-3 text-right">Venta</th>
-                                      <th className="px-6 py-3">Categoría</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                  {metrics.rawData.map((row, idx) => (
-                                      <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                          <td className="px-6 py-3 text-slate-600 font-medium whitespace-nowrap">{row.date}</td>
-                                          <td className="px-6 py-3 text-slate-800 font-bold">{row.agent}</td>
-                                          <td className="px-6 py-3 text-right font-mono text-emerald-600 bg-emerald-50/30">{formatCurrency(row.sales)}</td>
-                                          <td className="px-6 py-3 text-slate-500">{row.category}</td>
-                                      </tr>
-                                  ))}
-                              </tbody>
-                          </table>
-                      </div>
-                  </div>
+      {/* Main Layout */}
+      <div className="flex flex-col h-screen">
+          
+          {/* Top Navigation */}
+          <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 shrink-0 z-30">
+              <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white"><i className="ph-bold ph-chart-polar"></i></div>
+                  <h1 className="font-bold text-gray-900 text-lg tracking-tight hidden md:block">Dashboard <span className="text-gray-400 font-normal">| {metrics.currentYear || 'Sin Datos'}</span></h1>
               </div>
-           ) : (
-             // DASHBOARD PRINCIPAL (Bento Grid)
-             <div className="space-y-6">
-                
-                {/* Header Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* KPI 1: Cumplimiento Global */}
-                    <div className="glass-panel p-5 relative overflow-hidden group hover:border-indigo-200 transition-colors">
-                        <div className="flex justify-between items-start mb-2">
-                             <div>
-                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Ventas</p>
-                                 <h3 className="text-2xl font-black text-slate-800 tracking-tight"><AnimatedCounter value={totalSales} prefix="$" /></h3>
-                             </div>
-                             <div className={`p-2 rounded-lg ${isCCAhead ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                                 <i className={`ph-bold ${isCCAhead ? 'ph-trend-up' : 'ph-trend-down'} text-xl`}></i>
-                             </div>
-                        </div>
-                        <div className="flex items-center gap-2 mt-4">
-                             <CircularProgress value={totalSales} max={goalCCToday} size={40} strokeWidth={4} color={isCCAhead ? 'text-emerald-500' : 'text-rose-500'} />
-                             <div className="flex flex-col">
-                                 <span className="text-xs font-bold text-slate-700">Meta al Día</span>
-                                 <span className="text-[10px] text-slate-400">{formatCurrency(goalCCToday)}</span>
-                             </div>
-                        </div>
-                    </div>
+              
+              <div className="flex items-center gap-2">
+                  <button onClick={() => setView('dashboard')} className={`nav-btn ${view === 'dashboard' ? 'active' : 'text-gray-500'}`}><i className="ph-bold ph-squares-four"></i> <span className="hidden md:inline">Resumen</span></button>
+                  <button onClick={() => setView('data')} className={`nav-btn ${view === 'data' ? 'active' : 'text-gray-500'}`}><i className="ph-bold ph-database"></i> <span className="hidden md:inline">Datos</span></button>
+                  <div className="w-px h-6 bg-gray-200 mx-2"></div>
+                  <label className="nav-btn text-gray-500 cursor-pointer hover:text-blue-600">
+                      <i className="ph-bold ph-upload-simple"></i>
+                      <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls" className="hidden" />
+                  </label>
+                  <button onClick={handleLogout} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 hover:text-red-600 text-gray-400 transition-colors"><i className="ph-bold ph-sign-out"></i></button>
+              </div>
+          </header>
 
-                    {/* KPI 2: Proyección */}
-                    <div className="glass-panel p-5 relative overflow-hidden group hover:border-indigo-200 transition-colors">
-                         <div className="flex justify-between items-start mb-4">
-                             <div>
-                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Proyección Cierre</p>
-                                 <h3 className="text-2xl font-black text-indigo-600 tracking-tight"><AnimatedCounter value={daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0} prefix="$" /></h3>
-                             </div>
-                             <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
-                                 <i className="ph-bold ph-chart-line-up text-xl"></i>
-                             </div>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                            <div className="bg-indigo-500 h-full rounded-full animate-grow-up origin-left" style={{width: '65%'}}></div>
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-2 font-medium">Basado en promedio diario actual</p>
-                    </div>
+          {/* Content Area */}
+          <main className="flex-1 overflow-y-auto p-4 md:p-8">
+              <div className="max-w-7xl mx-auto">
+                  
+                  {metrics.agents.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-[60vh] text-center">
+                          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6 animate-pulse"><i className="ph-duotone ph-cloud-arrow-up text-4xl text-gray-400"></i></div>
+                          <h2 className="text-2xl font-bold text-gray-900 mb-2">Sin información visual</h2>
+                          <p className="text-gray-500 mb-8">Importa un archivo Excel para activar el tablero.</p>
+                          <label className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-bold cursor-pointer transition-colors shadow-lg shadow-blue-500/20">
+                              Subir Archivo <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx" className="hidden" />
+                          </label>
+                      </div>
+                  ) : view === 'data' ? (
+                      // Vista de Datos (Simplificada)
+                      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 animate-fade-in-up">
+                          <div className="lg:col-span-1 space-y-4">
+                              <div className="glass-effect p-6 rounded-2xl">
+                                  <h3 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide">Historial</h3>
+                                  {metrics.annual.map(item => (
+                                      <div key={item.year} className="flex justify-between items-center p-3 mb-2 bg-gray-50 rounded-lg group hover:bg-white border border-transparent hover:border-gray-200 transition-all">
+                                          <div>
+                                              <span className="block font-bold text-gray-900">{item.year}</span>
+                                              <span className="text-xs text-gray-500">{formatCurrency(item.total)}</span>
+                                          </div>
+                                          <button onClick={() => { if(window.confirm('¿Borrar?')) deleteYear(item.year)}} className="text-gray-300 hover:text-red-500"><i className="ph-bold ph-trash"></i></button>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                          <div className="lg:col-span-3 glass-effect p-0 rounded-2xl overflow-hidden flex flex-col h-[80vh]">
+                              <div className="p-4 bg-gray-50/50 border-b border-gray-100 flex justify-between items-center">
+                                  <h3 className="font-bold text-gray-700">Registros ({metrics.rawData.length})</h3>
+                              </div>
+                              <div className="overflow-auto flex-1">
+                                  <table className="w-full text-sm text-left text-gray-600">
+                                      <thead className="text-xs text-gray-400 uppercase bg-gray-50 sticky top-0">
+                                          <tr><th className="px-6 py-3">Fecha</th><th className="px-6 py-3">Asesor</th><th className="px-6 py-3 text-right">Monto</th></tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                          {metrics.rawData.map((r,i) => (
+                                              <tr key={i} className="hover:bg-gray-50"><td className="px-6 py-2">{r.date}</td><td className="px-6 py-2 font-medium text-gray-900">{r.agent}</td><td className="px-6 py-2 text-right">{formatCurrency(r.sales)}</td></tr>
+                                          ))}
+                                      </tbody>
+                                  </table>
+                              </div>
+                          </div>
+                      </div>
+                  ) : (
+                      // DASHBOARD PRINCIPAL (Clean Layout)
+                      <div className="space-y-8 animate-fade-in-up">
+                          
+                          {/* 1. HERO SECTION - KPIs Principales */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                              {/* Venta Total */}
+                              <div className="glass-effect p-6 rounded-2xl relative overflow-hidden group">
+                                  <div className="flex justify-between items-start z-10 relative">
+                                      <div>
+                                          <p className="text-xs font-bold text-gray-400 uppercase mb-1">Total Ventas</p>
+                                          <h3 className="text-3xl font-bold text-gray-900 tracking-tight"><AnimatedCounter value={totalSales} prefix="$" /></h3>
+                                      </div>
+                                      <div className="h-10 w-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400"><i className="ph-bold ph-currency-dollar"></i></div>
+                                  </div>
+                                  <div className="mt-6 flex items-center gap-3">
+                                      <CircularProgress value={totalSales} max={goalCCToday} size={48} strokeWidth={4} color={isCCAhead ? 'text-emerald-500' : 'text-rose-500'} />
+                                      <div>
+                                          <p className="text-sm font-bold text-gray-700">Meta: {formatCurrency(goalCCToday)}</p>
+                                          <p className={`text-xs font-bold ${isCCAhead ? 'text-emerald-600' : 'text-rose-500'}`}>{isCCAhead ? 'En Objetivo' : 'Requiere Atención'}</p>
+                                      </div>
+                                  </div>
+                              </div>
 
-                     {/* KPI 3: Saldo Pendiente (RESTAURADO) */}
-                     <div className="glass-panel p-5 relative overflow-hidden group hover:border-indigo-200 transition-colors">
-                         <div className="flex justify-between items-start mb-2">
-                             <div>
-                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Saldo Pendiente</p>
-                                 <h3 className="text-2xl font-black text-slate-800 tracking-tight"><AnimatedCounter value={Math.max(0, goalMonthCC - totalSales)} prefix="$" /></h3>
-                             </div>
-                             <div className="p-2 rounded-lg bg-slate-100 text-slate-600">
-                                 <i className="ph-bold ph-hourglass-high text-xl"></i>
-                             </div>
-                        </div>
-                         <div className="mt-4 flex items-center justify-between text-xs font-bold text-slate-500">
-                            <span>Meta Mes: {formatCurrency(goalMonthCC)}</span>
-                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{daysTotal - daysElapsed} días rest.</span>
-                        </div>
-                    </div>
+                              {/* Proyeccion */}
+                              <div className="glass-effect p-6 rounded-2xl relative overflow-hidden">
+                                  <div className="flex justify-between items-start">
+                                      <div>
+                                          <p className="text-xs font-bold text-gray-400 uppercase mb-1">Proyección</p>
+                                          <h3 className="text-2xl font-bold text-blue-600"><AnimatedCounter value={daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0} prefix="$" /></h3>
+                                      </div>
+                                      <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500"><i className="ph-bold ph-trend-up"></i></div>
+                                  </div>
+                                  <div className="w-full bg-gray-100 rounded-full h-1 mt-6">
+                                      <div className="bg-blue-500 h-1 rounded-full" style={{width: '65%'}}></div>
+                                  </div>
+                                  <p className="text-xs text-gray-400 mt-2">Basado en promedio diario</p>
+                              </div>
 
-                     {/* KPI 4: Top Performer */}
-                     <div className="bg-slate-900 text-white rounded-2xl p-5 relative overflow-hidden shadow-lg shadow-slate-900/10">
-                         <div className="absolute top-0 right-0 p-8 bg-white/5 rounded-full blur-2xl -mr-4 -mt-4"></div>
-                         <div className="relative z-10">
-                            <div className="flex items-center gap-2 mb-3">
-                                <i className="ph-fill ph-trophy text-amber-500"></i>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">MVP del Día</p>
-                            </div>
-                            <h3 className="text-xl font-bold mb-1">{bestAgentToday.name.split(' ')[0]}</h3>
-                            <div className="inline-block bg-white/10 px-3 py-1 rounded-lg border border-white/10 text-sm font-bold text-amber-400">
-                                {formatCurrency(bestAgentToday.sales)}
-                            </div>
-                         </div>
-                    </div>
-                </div>
+                              {/* Saldo Pendiente */}
+                              <div className="glass-effect p-6 rounded-2xl relative">
+                                  <div className="flex justify-between items-start">
+                                      <div>
+                                          <p className="text-xs font-bold text-gray-400 uppercase mb-1">Por Cubrir</p>
+                                          <h3 className="text-2xl font-bold text-gray-800"><AnimatedCounter value={Math.max(0, goalMonthCC - totalSales)} prefix="$" /></h3>
+                                      </div>
+                                      <div className="h-8 w-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500"><i className="ph-bold ph-hourglass"></i></div>
+                                  </div>
+                                  <div className="mt-6 flex justify-between text-xs font-medium text-gray-500">
+                                      <span>Meta: {formatCurrency(goalMonthCC)}</span>
+                                      <span>{daysTotal - daysElapsed} días rest.</span>
+                                  </div>
+                              </div>
 
-                {/* Control Strip (RESTAURADO) */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="metric-mini">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Ritmo Esperado</p>
-                        <p className="text-lg font-black text-amber-500">{(targetPercentToday * 100).toFixed(0)}%</p>
-                    </div>
-                     <div className="metric-mini">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes Agente</p>
-                        <p className="text-lg font-black text-slate-700">{formatCurrency(goalMonthAgent)}</p>
-                    </div>
-                     <div className="metric-mini">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día Agente</p>
-                        <p className="text-lg font-black text-slate-700">{formatCurrency(goalDailyAgent)}</p>
-                    </div>
-                     <div className="metric-mini">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día CC</p>
-                        <p className="text-lg font-black text-slate-700">{formatCurrency(goalDailyCC)}</p>
-                    </div>
-                </div>
+                              {/* MVP Card */}
+                              <div className="bg-gray-900 rounded-2xl p-6 text-white relative overflow-hidden shadow-xl shadow-gray-900/10 card-hover">
+                                  <div className="absolute top-0 right-0 p-12 bg-white/5 rounded-full blur-2xl -mr-6 -mt-6"></div>
+                                  <div className="relative z-10">
+                                      <div className="flex items-center gap-2 mb-4">
+                                          <i className="ph-fill ph-trophy text-yellow-400"></i>
+                                          <span className="text-xs font-bold text-gray-400 uppercase">MVP Hoy</span>
+                                      </div>
+                                      <h3 className="text-xl font-bold mb-1">{bestAgentToday.name.split(' ')[0]}</h3>
+                                      <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 to-yellow-500">{formatCurrency(bestAgentToday.sales)}</p>
+                                  </div>
+                              </div>
+                          </div>
 
-                {/* Main Grid: Charts & Tables */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
-                    {/* Columna Izquierda (2/3): Gráficas */}
-                    <div className="lg:col-span-2 space-y-6">
-                        
-                        {/* Fila: Evolución y Market Share */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                             <div className="glass-panel p-6 flex flex-col justify-between min-h-[300px]">
-                                 <div className="mb-4">
-                                     <h3 className="font-bold text-slate-800 flex items-center gap-2"><i className="ph-fill ph-clock-counter-clockwise text-indigo-500"></i> Evolución (3 Años)</h3>
-                                     <p className="text-xs text-slate-400">Comparativo histórico de ventas</p>
-                                 </div>
-                                 <div className="flex-1 w-full relative">
-                                     <canvas ref={barChartRef}></canvas>
-                                 </div>
-                             </div>
+                          {/* 2. MAIN CONTENT GRID */}
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                              
+                              {/* Left Column: Charts (8 cols) */}
+                              <div className="lg:col-span-8 space-y-6">
+                                  {/* Evolution Chart */}
+                                  <div className="glass-effect p-6 rounded-2xl">
+                                      <div className="flex items-center justify-between mb-6">
+                                          <h3 className="font-bold text-gray-800">Evolución Histórica</h3>
+                                          <div className="text-xs font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded">Últimos 3 años</div>
+                                      </div>
+                                      <div className="h-64 w-full relative">
+                                          <canvas ref={barChartRef}></canvas>
+                                      </div>
+                                  </div>
 
-                             <div className="glass-panel p-6 flex flex-col items-center justify-center min-h-[300px] relative">
-                                <div className="absolute top-6 left-6">
-                                     <h3 className="font-bold text-slate-800 flex items-center gap-2"><i className="ph-fill ph-chart-pie-slice text-amber-500"></i> Distribución {metrics.currentYear}</h3>
-                                </div>
-                                <div className="w-[200px] h-[200px] relative mt-8">
-                                    <canvas ref={pieChartRef}></canvas>
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                        <span className="text-[10px] uppercase font-bold text-slate-400">{hoveredAgent ? hoveredAgent.name : 'TOTAL'}</span>
-                                        <span className="text-lg font-black text-slate-800">{hoveredAgent ? formatCurrency(hoveredAgent.sales) : formatCurrency(totalSales)}</span>
-                                    </div>
-                                </div>
-                             </div>
-                        </div>
-                        
-                        {/* Tabla de Asesores */}
-                        <div className="glass-panel overflow-hidden">
-                            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-white">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2"><i className="ph-fill ph-users-three text-slate-400"></i> Detalle por Asesor</h3>
-                                <div className="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">Meta Indv: {formatCurrency(goalMonthAgent)}</div>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-extrabold">
-                                        <tr>
-                                            <th className="px-6 py-4">Asesor</th>
-                                            <th className="px-6 py-4 text-center">Progreso</th>
-                                            <th className="px-6 py-4 text-right">Venta</th>
-                                            <th className="px-6 py-4 text-right">Brecha</th>
-                                            <th className="px-6 py-4 text-center">Estado</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {processedAgents.map((agent, idx) => {
-                                            const pct = Math.min(agent.percent * 100, 100);
-                                            const isAhead = agent.percent >= paceRatio;
-                                            return (
-                                                <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                                    <td className="px-6 py-4 font-bold text-slate-700 flex items-center gap-3">
-                                                        <span className="w-6 h-6 rounded bg-slate-200 text-slate-600 flex items-center justify-center text-[10px]">{getInitials(agent.name)}</span>
-                                                        {agent.name.split(' ')[0]}
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                                <div className={`h-full rounded-full ${isAhead ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{width: `${pct}%`}}></div>
-                                                            </div>
-                                                            <span className="text-[10px] font-bold text-slate-400 w-8">{pct.toFixed(0)}%</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right font-bold text-slate-800">{formatCurrency(agent.sales)}</td>
-                                                    <td className={`px-6 py-4 text-right font-bold text-xs ${agent.diff >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                                        {agent.diff > 0 ? '+' : ''}{formatCurrency(agent.diff)}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        {isAhead 
-                                                            ? <i className="ph-fill ph-check-circle text-emerald-500 text-lg"></i>
-                                                            : <i className="ph-fill ph-warning-circle text-amber-500 text-lg"></i>
-                                                        }
-                                                    </td>
-                                                </tr>
-                                            )
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                                  {/* Agents Table */}
+                                  <div className="glass-effect rounded-2xl overflow-hidden">
+                                      <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white">
+                                          <h3 className="font-bold text-gray-800">Rendimiento por Asesor</h3>
+                                          <span className="text-xs font-medium text-gray-400">Meta Indv: {formatCurrency(goalMonthAgent)}</span>
+                                      </div>
+                                      <div className="overflow-x-auto">
+                                          <table className="w-full text-sm text-left">
+                                              <thead className="bg-gray-50/50 text-xs uppercase text-gray-400 font-bold">
+                                                  <tr>
+                                                      <th className="px-6 py-4">Asesor</th>
+                                                      <th className="px-6 py-4 text-center">Progreso</th>
+                                                      <th className="px-6 py-4 text-right">Venta</th>
+                                                      <th className="px-6 py-4 text-center">Gap</th>
+                                                  </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-gray-50">
+                                                  {processedAgents.map((agent, idx) => {
+                                                      const pct = Math.min(agent.percent * 100, 100);
+                                                      const isOk = agent.percent >= paceRatio;
+                                                      return (
+                                                          <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                                                              <td className="px-6 py-4 font-bold text-gray-700 flex items-center gap-3">
+                                                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs text-white shadow-sm ${idx < 3 ? 'bg-gray-900' : 'bg-gray-400'}`}>
+                                                                      {getInitials(agent.name)}
+                                                                  </div>
+                                                                  {agent.name.split(' ')[0]}
+                                                              </td>
+                                                              <td className="px-6 py-4">
+                                                                  <div className="w-24 mx-auto h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                                      <div className={`h-full rounded-full ${isOk ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{width: `${pct}%`}}></div>
+                                                                  </div>
+                                                              </td>
+                                                              <td className="px-6 py-4 text-right font-bold text-gray-900">{formatCurrency(agent.sales)}</td>
+                                                              <td className={`px-6 py-4 text-center font-bold text-xs ${agent.diff >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                                  {agent.diff > 0 ? '+' : ''}{formatCurrency(agent.diff)}
+                                                              </td>
+                                                          </tr>
+                                                      )
+                                                  })}
+                                              </tbody>
+                                          </table>
+                                      </div>
+                                  </div>
+                              </div>
 
-                    </div>
+                              {/* Right Column: Details (4 cols) */}
+                              <div className="lg:col-span-4 space-y-6">
+                                  
+                                  {/* Donut Chart */}
+                                  <div className="glass-effect p-6 rounded-2xl flex flex-col items-center justify-center text-center relative h-[340px]">
+                                      <h3 className="absolute top-6 left-6 font-bold text-gray-800 text-sm">Cuota de Mercado</h3>
+                                      <div className="w-[200px] h-[200px] relative z-10">
+                                          <canvas ref={pieChartRef}></canvas>
+                                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                              <span className="text-[10px] font-bold text-gray-400 uppercase">{hoveredAgent ? hoveredAgent.name.split(' ')[0] : 'TOTAL'}</span>
+                                              <span className="text-lg font-black text-gray-800">{hoveredAgent ? formatCurrency(hoveredAgent.sales) : formatCurrency(totalSales)}</span>
+                                          </div>
+                                      </div>
+                                  </div>
 
-                    {/* Columna Derecha (1/3): Ranking y Categorías */}
-                    <div className="space-y-6">
-                        
-                        {/* Podium */}
-                        <div className="glass-panel p-6 bg-gradient-to-b from-white to-slate-50 border-indigo-100 border text-center">
-                            <h3 className="font-extrabold text-slate-800 mb-6 uppercase tracking-wider text-xs">Ranking de Campeones</h3>
-                            <Podium agents={processedAgents} />
-                        </div>
-                        
-                        {/* Gráfica Lineal Mini */}
-                        <div className="glass-panel p-6">
-                             <div className="mb-4 flex items-center justify-between">
-                                 <h3 className="font-bold text-slate-800 text-sm">Tendencia Mensual</h3>
-                                 <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded">Venta Diaria</span>
-                             </div>
-                             <div className="h-32 w-full relative">
-                                 <canvas ref={lineChartRef}></canvas>
-                             </div>
-                        </div>
+                                  {/* Podium */}
+                                  <div className="glass-effect p-6 rounded-2xl bg-white border border-gray-100">
+                                      <h3 className="font-bold text-gray-800 mb-2 text-center">Top Performers</h3>
+                                      <Podium agents={processedAgents} />
+                                  </div>
 
-                        {/* Top Categorias */}
-                        {top3Categories.length > 0 && (
-                            <div className="glass-panel overflow-hidden">
-                                <div className="p-4 border-b border-slate-100 font-bold text-slate-800 text-sm flex items-center gap-2">
-                                    <i className="ph-fill ph-tag text-slate-400"></i> Top Categorías
-                                </div>
-                                <div className="divide-y divide-slate-50">
-                                    {top3Categories.map((cat, i) => (
-                                        <div key={i} className="p-3 flex items-center justify-between text-sm hover:bg-slate-50">
-                                            <span className="text-slate-600 font-medium truncate max-w-[120px]" title={cat.name}>{cat.name}</span>
-                                            <span className="font-bold text-slate-800">{formatCurrency(cat.sales)}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                                  {/* Mini Daily Trend */}
+                                  <div className="glass-effect p-6 rounded-2xl">
+                                       <div className="flex justify-between items-center mb-4">
+                                           <h3 className="font-bold text-gray-800 text-sm">Tendencia Diaria</h3>
+                                           <span className={`text-xs font-bold px-2 py-0.5 rounded ${growthPct >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                               {growthPct > 0 ? '+' : ''}{growthPct.toFixed(1)}%
+                                           </span>
+                                       </div>
+                                       <div className="h-20 w-full relative">
+                                           <canvas ref={lineChartRef}></canvas>
+                                       </div>
+                                  </div>
+                              </div>
 
-                    </div>
-                </div>
+                          </div>
+                          
+                          {/* Footer KPIs Strip */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
+                               <div className="text-center border-r border-gray-100 last:border-0">
+                                   <p className="text-[10px] font-bold text-gray-400 uppercase">Ritmo Req.</p>
+                                   <p className="font-bold text-gray-800">{(targetPercentToday * 100).toFixed(0)}%</p>
+                               </div>
+                               <div className="text-center border-r border-gray-100 last:border-0">
+                                   <p className="text-[10px] font-bold text-gray-400 uppercase">Meta Mes Agt</p>
+                                   <p className="font-bold text-gray-800">{formatCurrency(goalMonthAgent)}</p>
+                               </div>
+                               <div className="text-center border-r border-gray-100 last:border-0">
+                                   <p className="text-[10px] font-bold text-gray-400 uppercase">Meta Día Agt</p>
+                                   <p className="font-bold text-gray-800">{formatCurrency(goalDailyAgent)}</p>
+                               </div>
+                               <div className="text-center">
+                                   <p className="text-[10px] font-bold text-gray-400 uppercase">Meta Día CC</p>
+                                   <p className="font-bold text-gray-800">{formatCurrency(goalDailyCC)}</p>
+                               </div>
+                          </div>
 
-             </div>
-           )}
-        </div>
-      </main>
+                      </div>
+                  )}
+              </div>
+          </main>
+      </div>
     </div>
   );
 }
