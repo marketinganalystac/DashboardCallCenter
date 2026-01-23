@@ -875,6 +875,7 @@ export default function App() {
   const goalMonthCC = goalMonthAgent * 3; 
   const goalDailyCC = goalDailyAgent * 3; 
   const paceRatio = daysTotal > 0 ? (daysElapsed / daysTotal) : 0;
+  const targetPercentToday = 1 - paceRatio; 
   
   const processedAgents = metrics.agents.map(a => ({ ...a, diff: a.sales - goalMonthAgent, percent: a.sales / goalMonthAgent })).sort((a, b) => b.sales - a.sales);
   const totalSales = processedAgents.reduce((acc, curr) => acc + curr.sales, 0);
@@ -912,6 +913,8 @@ export default function App() {
     .podium-bar { position: relative; overflow: hidden; }
     .podium-bar::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%); transform: skewX(-20deg) translateX(-150%); transition: transform 0.5s; }
     .podium-bar:hover::after { transform: skewX(-20deg) translateX(150%); transition: transform 1s; }
+    .metric-mini { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; text-align: center; transition: all 0.2s; }
+    .metric-mini:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border-color: #cbd5e1; }
   `;
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><i className="ph ph-spinner animate-spin text-amber-500 text-4xl"></i></div>;
@@ -1078,22 +1081,20 @@ export default function App() {
                         <p className="text-[10px] text-slate-400 mt-2 font-medium">Basado en promedio diario actual</p>
                     </div>
 
-                    {/* KPI 3: Venta Diaria */}
-                    <div className="glass-panel p-5 relative overflow-hidden group hover:border-indigo-200 transition-colors">
+                     {/* KPI 3: Saldo Pendiente (RESTAURADO) */}
+                     <div className="glass-panel p-5 relative overflow-hidden group hover:border-indigo-200 transition-colors">
                          <div className="flex justify-between items-start mb-2">
                              <div>
-                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Último Día</p>
-                                 <h3 className="text-2xl font-black text-slate-800 tracking-tight">{formatCurrency(lastDaySales)}</h3>
+                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Saldo Pendiente</p>
+                                 <h3 className="text-2xl font-black text-slate-800 tracking-tight"><AnimatedCounter value={Math.max(0, goalMonthCC - totalSales)} prefix="$" /></h3>
                              </div>
-                             <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
-                                 <i className="ph-bold ph-sun text-xl"></i>
+                             <div className="p-2 rounded-lg bg-slate-100 text-slate-600">
+                                 <i className="ph-bold ph-hourglass-high text-xl"></i>
                              </div>
                         </div>
-                        <div className="mt-4 flex items-center gap-2 text-xs font-bold">
-                            <span className={`${growthPct >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'} px-2 py-1 rounded`}>
-                                {growthPct > 0 ? '+' : ''}{growthPct.toFixed(1)}%
-                            </span>
-                            <span className="text-slate-400">vs día anterior</span>
+                         <div className="mt-4 flex items-center justify-between text-xs font-bold text-slate-500">
+                            <span>Meta Mes: {formatCurrency(goalMonthCC)}</span>
+                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{daysTotal - daysElapsed} días rest.</span>
                         </div>
                     </div>
 
@@ -1110,6 +1111,26 @@ export default function App() {
                                 {formatCurrency(bestAgentToday.sales)}
                             </div>
                          </div>
+                    </div>
+                </div>
+
+                {/* Control Strip (RESTAURADO) */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="metric-mini">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Ritmo Esperado</p>
+                        <p className="text-lg font-black text-amber-500">{(targetPercentToday * 100).toFixed(0)}%</p>
+                    </div>
+                     <div className="metric-mini">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Mes Agente</p>
+                        <p className="text-lg font-black text-slate-700">{formatCurrency(goalMonthAgent)}</p>
+                    </div>
+                     <div className="metric-mini">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día Agente</p>
+                        <p className="text-lg font-black text-slate-700">{formatCurrency(goalDailyAgent)}</p>
+                    </div>
+                     <div className="metric-mini">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Meta Día CC</p>
+                        <p className="text-lg font-black text-slate-700">{formatCurrency(goalDailyCC)}</p>
                     </div>
                 </div>
 
@@ -1153,7 +1174,7 @@ export default function App() {
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="bg-slate-50 text-xs uppercase text-slate-400 font-bold">
+                                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-extrabold">
                                         <tr>
                                             <th className="px-6 py-4">Asesor</th>
                                             <th className="px-6 py-4 text-center">Progreso</th>
@@ -1162,7 +1183,7 @@ export default function App() {
                                             <th className="px-6 py-4 text-center">Estado</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-50">
+                                    <tbody className="divide-y divide-slate-100">
                                         {processedAgents.map((agent, idx) => {
                                             const pct = Math.min(agent.percent * 100, 100);
                                             const isAhead = agent.percent >= paceRatio;
@@ -1205,7 +1226,7 @@ export default function App() {
                         
                         {/* Podium */}
                         <div className="glass-panel p-6 bg-gradient-to-b from-white to-slate-50 border-indigo-100 border text-center">
-                            <h3 className="font-bold text-slate-800 mb-6 uppercase tracking-wider text-xs">Ranking de Campeones</h3>
+                            <h3 className="font-extrabold text-slate-800 mb-6 uppercase tracking-wider text-xs">Ranking de Campeones</h3>
                             <Podium agents={processedAgents} />
                         </div>
                         
