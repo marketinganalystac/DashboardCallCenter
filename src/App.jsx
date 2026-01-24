@@ -466,15 +466,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // --- SOLUCIÓN PARA LA CARGA DOBLE ---
-    // Solo actualiza los gráficos si las librerías están cargadas Y las métricas tienen datos.
-    // Usamos requestAnimationFrame para asegurar que el DOM está listo.
+    // --- SOLUCIÓN PARA LA CARGA DOBLE MEJORADA ---
+    // Aseguramos que librerías, datos y DOM estén listos antes de dibujar.
     if (!scriptsLoaded || typeof Chart === 'undefined') return;
-    if (view === 'dashboard') {
-        // Esperamos a que las fuentes estén listas para evitar parpadeos o renders vacíos
-        document.fonts.ready.then(() => {
-             requestAnimationFrame(() => updateCharts());
+    
+    if (view === 'dashboard' && metrics.agents.length > 0) {
+        // Usamos un doble requestAnimationFrame para asegurar que el navegador
+        // ha terminado de calcular el layout CSS (Tailwind) antes de pintar el gráfico.
+        // Esto soluciona el problema de que aparezca mal dimensionado en la primera carga.
+        const handle = requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                 document.fonts.ready.then(() => {
+                     updateCharts();
+                 });
+            });
         });
+        
+        // Listener de seguridad para redimensionar si la ventana cambia
+        window.addEventListener('resize', updateCharts);
+        
+        return () => {
+            cancelAnimationFrame(handle);
+            window.removeEventListener('resize', updateCharts);
+        };
     }
   }, [metrics, view, scriptsLoaded]);
 
