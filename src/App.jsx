@@ -583,7 +583,18 @@ export default function App() {
                 },
                 formatter: (value, ctx) => {
                   if (ctx.dataset.type === 'line' || value === 0) return null;
-                  return '$' + (value / 1000).toFixed(1) + 'k';
+                  let text = '$' + (value / 1000).toFixed(1) + 'k';
+                  
+                  // Calcular variación porcentual vs año anterior para este mismo dataset (agente)
+                  if (ctx.dataIndex > 0) {
+                      const prev = ctx.dataset.data[ctx.dataIndex - 1];
+                      if (prev && prev !== 0) {
+                         const change = ((value - prev) / prev) * 100;
+                         const sign = change >= 0 ? '+' : '';
+                         text += `\n(${sign}${change.toFixed(0)}%)`;
+                      }
+                  }
+                  return text;
                 },
                 color: '#334155' // Color oscuro para visibilidad
               },
@@ -664,7 +675,18 @@ export default function App() {
                       },
                       formatter: (value, ctx) => {
                         if (value === 0) return '';
-                        return '$' + (value / 1000).toFixed(1) + 'k';
+                        let text = '$' + (value / 1000).toFixed(1) + 'k';
+                        
+                        // Calcular variación porcentual respecto al día anterior
+                        if (ctx.dataIndex > 0) {
+                            const prev = ctx.dataset.data[ctx.dataIndex - 1];
+                            if (prev > 0) {
+                                const change = ((value - prev) / prev) * 100;
+                                const sign = change >= 0 ? '+' : '';
+                                text += `\n(${sign}${change.toFixed(1)}%)`;
+                            }
+                        }
+                        return text;
                       },
                       color: (ctx) => {
                         const idx = ctx.dataIndex;
