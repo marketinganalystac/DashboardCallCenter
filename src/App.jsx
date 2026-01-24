@@ -265,6 +265,7 @@ export default function App() {
   const [pendingFile, setPendingFile] = useState(null);
   const [notification, setNotification] = useState(null);
   const [hoveredAgent, setHoveredAgent] = useState(null);
+  const [scriptsLoaded, setScriptsLoaded] = useState(false);
   const pieChartRef = useRef(null);
   const barChartRef = useRef(null);
   const lineChartRef = useRef(null);
@@ -284,8 +285,6 @@ export default function App() {
       setUser(u);
       setLoading(false);
     });
-    const days = getPanamaBusinessDays();
-    setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
     return () => unsubscribe();
   }, []);
 
@@ -332,16 +331,15 @@ export default function App() {
         if (!element) throw new Error("No se encontró el contenido del tablero");
 
         const canvas = await window.html2canvas(element, {
-            scale: 2, // Mejora la calidad
+            scale: 2, 
             useCORS: true,
             logging: false,
-            backgroundColor: '#f1f5f9' // Mantiene el color de fondo
+            backgroundColor: '#f1f5f9'
         });
 
         const imgData = canvas.toDataURL('image/png');
         const { jsPDF } = window.jspdf;
         
-        // Orientación vertical (Portrait) o Horizontal (Landscape) - usaremos Landscape para mejor vista del tablero
         const pdf = new jsPDF('p', 'mm', 'a4'); 
         
         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -350,24 +348,18 @@ export default function App() {
         const imgWidth = canvas.width;
         const imgHeight = canvas.height;
         
-        // Calcular ratio para ajustar al ancho de la página con márgenes
         const margin = 10;
         const availableWidth = pdfWidth - (margin * 2);
         const ratio = availableWidth / imgWidth;
         
-        const finalHeight = imgHeight * ratio;
-        
-        // Si el alto es mayor a la página, se ajustará (o podríamos dividir, pero pidieron 1 página)
-        // Para asegurar 1 sola página, usamos el ratio más restrictivo
         const availableHeight = pdfHeight - (margin * 2);
         const heightRatio = availableHeight / imgHeight;
         
-        const finalRatio = Math.min(ratio, heightRatio); // Escoge el que ajuste mejor para que quepa todo
+        const finalRatio = Math.min(ratio, heightRatio); 
         
         const finalW = imgWidth * finalRatio;
         const finalH = imgHeight * finalRatio;
         
-        // Centrar
         const x = (pdfWidth - finalW) / 2;
         const y = margin;
 
@@ -399,8 +391,27 @@ export default function App() {
             currentMonthName: data.currentMonthName || '',
             rawData: data.rawData || []
         });
+
+        // --- SOLUCIÓN PARA LA CONSISTENCIA DE DATOS DEL DÍA ---
+        // Calcula días hábiles basado en la fecha REAL de los datos, no en la fecha del sistema del usuario.
+        // Esto evita que al abrir el dashboard un nuevo día, los indicadores se "reseteen" si los datos son viejos.
+        let referenceDate = new Date();
+        if (data.rawData && data.rawData.length > 0) {
+            // Buscamos la fecha más reciente en los datos para usarla de referencia
+            const dates = data.rawData
+                .map(d => new Date(d.date + 'T12:00:00')) // Forzamos hora para evitar problemas de timezone
+                .filter(d => !isNaN(d.getTime()));
+            if (dates.length > 0) {
+                referenceDate = new Date(Math.max(...dates));
+            }
+        }
+        const days = getPanamaBusinessDays(referenceDate);
+        setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
+
       } else {
         setMetrics({ agents: [], annual: [], daily: [], categories: [], currentYear: new Date().getFullYear(), currentMonthName: '', rawData: [] });
+        const days = getPanamaBusinessDays(new Date());
+        setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
       }
       setDataLoading(false);
     }, (error) => setDataLoading(false));
@@ -450,14 +461,22 @@ export default function App() {
       if (window.Chart && window.ChartDataLabels) {
         window.Chart.register(window.ChartDataLabels);
       }
-      updateCharts();
+      setScriptsLoaded(true); // Indica que ya podemos renderizar
     });
   }, []);
 
   useEffect(() => {
-    if (typeof Chart === 'undefined') return;
-    if (view === 'dashboard') updateCharts();
-  }, [metrics, view]);
+    // --- SOLUCIÓN PARA LA CARGA DOBLE ---
+    // Solo actualiza los gráficos si las librerías están cargadas Y las métricas tienen datos.
+    // Usamos requestAnimationFrame para asegurar que el DOM está listo.
+    if (!scriptsLoaded || typeof Chart === 'undefined') return;
+    if (view === 'dashboard') {
+        // Esperamos a que las fuentes estén listas para evitar parpadeos o renders vacíos
+        document.fonts.ready.then(() => {
+             requestAnimationFrame(() => updateCharts());
+        });
+    }
+  }, [metrics, view, scriptsLoaded]);
 
   const updateCharts = () => {
     if (typeof Chart === 'undefined') return;
@@ -551,7 +570,7 @@ export default function App() {
           pointRadius: 0,
           fill: false,
           order: 0,
-          datalabels: { display: false } // No mostrar etiqueta en la línea de meta para no saturar
+          datalabels: { display: false } 
       });
       
       const ctxBar = barChartRef.current.getContext('2d');
@@ -563,7 +582,7 @@ export default function App() {
           maintainAspectRatio: false,
           layout: {
             padding: {
-                top: 30, // Espacio extra arriba para las etiquetas
+                top: 30, 
             }
           },
           scales: {
@@ -574,8 +593,8 @@ export default function App() {
               legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: {size: 10} } },
               datalabels: {
                 anchor: 'end',
-                align: 'end', // Pone el valor ENCIMA de la barra
-                clip: false, // Permite que se salga del canvas si es necesario (y visible con el padding)
+                align: 'end', 
+                clip: false, 
                 offset: -2,
                 font: {
                   size: 10,
@@ -585,7 +604,6 @@ export default function App() {
                   if (ctx.dataset.type === 'line' || value === 0) return null;
                   let text = '$' + (value / 1000).toFixed(1) + 'k';
                   
-                  // Calcular variación porcentual vs año anterior para este mismo dataset (agente)
                   if (ctx.dataIndex > 0) {
                       const prev = ctx.dataset.data[ctx.dataIndex - 1];
                       if (prev && prev !== 0) {
@@ -596,7 +614,7 @@ export default function App() {
                   }
                   return text;
                 },
-                color: '#334155' // Color oscuro para visibilidad
+                color: '#334155' 
               },
               tooltip: {
                   callbacks: {
@@ -667,7 +685,7 @@ export default function App() {
                     legend: { display: true, position: 'top' },
                     datalabels: {
                       anchor: 'end',
-                      align: 'top', // Encima del punto
+                      align: 'top', 
                       offset: 4,
                       font: {
                         size: 9,
@@ -677,7 +695,6 @@ export default function App() {
                         if (value === 0) return '';
                         let text = '$' + (value / 1000).toFixed(1) + 'k';
                         
-                        // Calcular variación porcentual respecto al día anterior
                         if (ctx.dataIndex > 0) {
                             const prev = ctx.dataset.data[ctx.dataIndex - 1];
                             if (prev > 0) {
