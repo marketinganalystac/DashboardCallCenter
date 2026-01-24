@@ -582,12 +582,12 @@ export default function App() {
               data: data,
               backgroundColor: colors[index % colors.length],
               borderRadius: 4,
-              barThickness: 28,
+              barThickness: 40,
           });
       });
       const unknownData = sortedYears.map(yearData => !yearData.agents ? yearData.total : 0);
       if (unknownData.some(v => v > 0)) {
-           datasets.push({ label: 'Sin Desglose', data: unknownData, backgroundColor: '#cbd5e1', borderRadius: 4, barThickness: 28 });
+           datasets.push({ label: 'Sin Desglose', data: unknownData, backgroundColor: '#cbd5e1', borderRadius: 4, barThickness: 40 });
       }
       const annualGoal = 15000 * 12;
       datasets.push({
@@ -639,7 +639,7 @@ export default function App() {
                       if (prev && prev !== 0) {
                          const change = ((value - prev) / prev) * 100;
                          const sign = change >= 0 ? '+' : '';
-                         text += `\n(${sign}${change.toFixed(0)}%)`;
+                         text += ` (${sign}${change.toFixed(0)}%)`;
                       }
                   }
                   return text;
@@ -1396,7 +1396,7 @@ export default function App() {
                    <h3 className="font-extrabold text-slate-800 flex items-center gap-2 mb-6 text-sm uppercase tracking-widest">
                       <i className="ph-fill ph-clock-counter-clockwise text-slate-400 text-lg"></i> Evolución Histórica
                    </h3>
-                   <div className="h-48 w-full relative"><canvas ref={barChartRef}></canvas></div>
+                   <div className="h-80 w-full relative"><canvas ref={barChartRef}></canvas></div>
                 </div>
               </div>
             </>
