@@ -511,6 +511,10 @@ export default function App() {
 
     // Pie Chart
     if (pieChartRef.current) {
+      const rect = pieChartRef.current.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return; // Skip if canvas has no size yet
+      }
       if (pieInstance.current) pieInstance.current.destroy();
       const ctxPie = pieChartRef.current.getContext('2d');
       pieInstance.current = new Chart(ctxPie, {
@@ -556,6 +560,10 @@ export default function App() {
 
     // Bar Chart - Evolución Histórica
     if (barChartRef.current) {
+      const rect = barChartRef.current.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return; // Skip if canvas has no size yet
+      }
       if (barInstance.current) barInstance.current.destroy();
       let sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
       if (sortedYears.length > 3) sortedYears = sortedYears.slice(-3);
@@ -656,6 +664,10 @@ export default function App() {
 
     // Line Chart - Ventas Diarias
     if (lineChartRef.current) {
+        const rect = lineChartRef.current.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+          return; // Skip if canvas has no size yet
+        }
         if (lineInstance.current) lineInstance.current.destroy();
         const dailyDataPoints = metrics.daily; 
         const labels = dailyDataPoints.map(d => parseInt(d.date.split('-')[2]));
