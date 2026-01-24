@@ -466,27 +466,35 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // --- SOLUCIÓN PARA LA CARGA DOBLE MEJORADA ---
-    // Aseguramos que librerías, datos y DOM estén listos antes de dibujar.
+    // --- SOLUCIÓN ROBUSTA PARA LA CARGA DE GRÁFICOS ---
+    // Estrategia de reintentos múltiples: Asegura que el gráfico se dibuje
+    // incluso si el navegador tarda en calcular el layout inicial.
     if (!scriptsLoaded || typeof Chart === 'undefined') return;
     
     if (view === 'dashboard' && metrics.agents.length > 0) {
-        // Usamos un doble requestAnimationFrame para asegurar que el navegador
-        // ha terminado de calcular el layout CSS (Tailwind) antes de pintar el gráfico.
-        // Esto soluciona el problema de que aparezca mal dimensionado en la primera carga.
-        const handle = requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                 document.fonts.ready.then(() => {
+        // Intentamos dibujar varias veces:
+        // 1. Inmediatamente
+        // 2. A los 500ms (cuando el DOM suele estar estable)
+        // 3. A los 1000ms (seguridad para equipos lentos)
+        const attempts = [0, 500, 1000];
+        const timers = [];
+
+        attempts.forEach(delay => {
+            const timer = setTimeout(() => {
+                 if (document.fonts) {
+                     document.fonts.ready.then(() => updateCharts());
+                 } else {
                      updateCharts();
-                 });
-            });
+                 }
+            }, delay);
+            timers.push(timer);
         });
         
         // Listener de seguridad para redimensionar si la ventana cambia
         window.addEventListener('resize', updateCharts);
         
         return () => {
-            cancelAnimationFrame(handle);
+            timers.forEach(t => clearTimeout(t));
             window.removeEventListener('resize', updateCharts);
         };
     }
