@@ -553,18 +553,16 @@ export default function App() {
       if (barInstance.current) barInstance.current.destroy();
 
       let sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
-      if (sortedYears.length > 5) sortedYears = sortedYears.slice(-5); // Máximo 5 años para evitar overcrowding
+      if (sortedYears.length > 5) sortedYears = sortedYears.slice(-5);
 
       const yearsLabels = sortedYears.map(y => y.year.toString());
 
-      // Obtener todos los agentes únicos y ordenarlos por ventas totales históricas
       const allAgentsSet = new Set();
       sortedYears.forEach(yearData => {
           if (yearData.agents) Object.keys(yearData.agents).forEach(agent => allAgentsSet.add(agent));
       });
       const allAgents = Array.from(allAgentsSet);
 
-      // Calcular total histórico por agente para ordenar
       const agentTotals = allAgents.map(agent => ({
         agent,
         total: sortedYears.reduce((sum, yearData) => sum + (yearData.agents?.[agent] || 0), 0)
@@ -587,7 +585,6 @@ export default function App() {
           });
       });
 
-      // Datos "Sin Desglose" al final
       const unknownData = sortedYears.map(yearData => !yearData.agents ? yearData.total : 0);
       if (unknownData.some(v => v > 0)) {
            datasets.push({ 
@@ -670,7 +667,7 @@ export default function App() {
       });
     }
 
-    // Line Chart - Ventas Diarias (sin cambios mayores)
+    // Line Chart - Ventas Diarias
     if (lineChartRef.current) {
         const rect = lineChartRef.current.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return;
@@ -749,7 +746,202 @@ export default function App() {
     }
   };
 
-  // ... (el resto del código de processFile, handleFileSelect, etc. permanece igual)
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (metrics.agents.length > 0) {
+      setPendingFile(file);
+      setShowConfirmModal(true);
+      e.target.value = ''; 
+    } else {
+      processFile(file);
+      e.target.value = ''; 
+    }
+  };
+
+  const deleteYear = async (yearToDelete) => {
+    if (!user) return;
+    try {
+        const updatedAnnual = metrics.annual.filter(item => item.year !== yearToDelete);
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period');
+        await updateDoc(docRef, { annual: updatedAnnual });
+        showNotification(`Año ${yearToDelete} eliminado del histórico`, 'success');
+    } catch (err) {
+        showNotification("Error al eliminar año: " + err.message, 'error');
+    }
+  };
+
+  const processFile = (file) => {
+    if (typeof XLSX === 'undefined') { showNotification("Librería Excel no lista", 'error'); return; }
+    setIsUploading(true);
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array', cellDates: true});
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false, dateNF: 'yyyy-mm-dd'});
+        let colIndices = { name: -1, sales: -1, date: -1, category: -1, quantity: -1 }; 
+        const headers = jsonData[0]; 
+        if (headers && Array.isArray(headers)) {
+          headers.forEach((h, idx) => {
+            const txt = String(h).toLowerCase();
+            if (colIndices.name === -1 && (txt.includes('asesor') || txt.includes('nombre') || txt.includes('agente'))) colIndices.name = idx;
+            if (colIndices.sales === -1 && (txt.includes('venta') || txt.includes('total') || txt.includes('monto'))) colIndices.sales = idx;
+            if (colIndices.date === -1 && (txt.includes('fecha') || txt.includes('date'))) colIndices.date = idx;
+            if (colIndices.category === -1 && (txt.includes('categoria') || txt.includes('category'))) colIndices.category = idx;
+            if (colIndices.quantity === -1 && (txt.includes('cantidad') || txt.includes('cant'))) colIndices.quantity = idx;
+          });
+        }
+        if (colIndices.name === -1 || colIndices.sales === -1 || colIndices.date === -1) throw new Error("Faltan columnas requeridas");
+        const annualMap = new Map();
+        if (metrics.annual && Array.isArray(metrics.annual)) {
+            metrics.annual.forEach(item => {
+                annualMap.set(item.year, { total: item.total, agents: item.agents || {} });
+            });
+        }
+        const dailyMap = new Map();
+        const agentsMap = new Map();
+        const categoryMap = new Map();
+        const dailyAgentSalesMap = new Map();
+        let rawDataArray = [];
+        let maxDateTimestamp = 0;
+        const yearsInFile = new Set();
+        for(let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (!row) continue;
+            const rawDate = row[colIndices.date];
+            if (rawDate) {
+                 let dateObj = null;
+                 if (rawDate instanceof Date) dateObj = rawDate;
+                 else if (typeof rawDate === 'string') dateObj = new Date(rawDate);
+                 if (dateObj && !isNaN(dateObj.getTime())) {
+                     yearsInFile.add(dateObj.getFullYear());
+                     if (dateObj.getTime() > maxDateTimestamp) maxDateTimestamp = dateObj.getTime();
+                 }
+            }
+        }
+        yearsInFile.forEach(y => annualMap.set(y, { total: 0, agents: {} }));
+        const maxDate = maxDateTimestamp > 0 ? new Date(maxDateTimestamp) : new Date();
+        const currentYear = maxDate.getFullYear();
+        const currentMonth = maxDate.getMonth();
+        const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+        const currentMonthName = monthNames[currentMonth];
+        for(let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row || !row[colIndices.name]) continue;
+          let salesVal = 0;
+          const rawSales = row[colIndices.sales];
+          if (typeof rawSales === 'number') salesVal = rawSales;
+          else if (typeof rawSales === 'string') salesVal = parseFloat(rawSales.replace(/[^0-9.-]+/g,"")) || 0;
+          const rawDate = row[colIndices.date];
+          let dateObj = null;
+          if (rawDate instanceof Date) dateObj = rawDate;
+          else if (typeof rawDate === 'string') dateObj = new Date(rawDate);
+          if (!dateObj || isNaN(dateObj.getTime())) continue;
+          const year = dateObj.getFullYear();
+          const month = dateObj.getMonth();
+          const day = dateObj.getDate();
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const rawName = String(row[colIndices.name]).trim();
+          if (rawDataArray.length < 2000) {
+              const rawCat = colIndices.category !== -1 ? String(row[colIndices.category] || "-").trim() : "-";
+              const rawQty = colIndices.quantity !== -1 ? (row[colIndices.quantity] || 0) : 0;
+              rawDataArray.push({ date: dateStr, agent: rawName, sales: salesVal, category: rawCat, quantity: rawQty });
+          }
+          const annualEntry = annualMap.get(year);
+          if (annualEntry) {
+              annualEntry.total += salesVal;
+              const agentKey = rawName; 
+              annualEntry.agents[agentKey] = (annualEntry.agents[agentKey] || 0) + salesVal;
+              annualMap.set(year, annualEntry);
+          }
+          if (year === currentYear) {
+              const nameKey = rawName.toLowerCase();
+              if (agentsMap.has(nameKey)) {
+                const existing = agentsMap.get(nameKey);
+                existing.sales += salesVal;
+                agentsMap.set(nameKey, existing);
+              } else {
+                agentsMap.set(nameKey, { name: rawName, sales: salesVal });
+              }
+              if (colIndices.category !== -1) {
+                  const rawCat = String(row[colIndices.category] || "Sin Categoría").trim();
+                  let qtyVal = 0;
+                  const rawQty = row[colIndices.quantity];
+                  if (typeof rawQty === 'number') qtyVal = rawQty;
+                  else if (typeof rawQty === 'string') qtyVal = parseFloat(rawQty.replace(/[^0-9.-]+/g,"")) || 0;
+                  if (categoryMap.has(rawCat)) {
+                      const existing = categoryMap.get(rawCat);
+                      existing.sales += salesVal;
+                      existing.quantity += qtyVal;
+                      categoryMap.set(rawCat, existing);
+                  } else {
+                      categoryMap.set(rawCat, { name: rawCat, sales: salesVal, quantity: qtyVal });
+                  }
+              }
+              if (month === currentMonth) {
+                  dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + salesVal);
+                  if (!dailyAgentSalesMap.has(dateStr)) dailyAgentSalesMap.set(dateStr, new Map());
+                  const dayAgentMap = dailyAgentSalesMap.get(dateStr);
+                  dayAgentMap.set(nameKey, (dayAgentMap.get(nameKey) || 0) + salesVal);
+              }
+          }
+        }
+        const annualArray = Array.from(annualMap, ([year, data]) => ({ year, total: data.total, agents: data.agents }));
+        const agentsArray = Array.from(agentsMap.values());
+        const categoriesArray = Array.from(categoryMap.values());
+        let dailyArray = [];
+        if (dailyMap.size > 0) {
+            const sortedDates = Array.from(dailyMap.keys()).sort();
+            if (sortedDates.length > 0) {
+                 const startDate = new Date(sortedDates[0] + 'T00:00:00');
+                 const endDate = new Date(sortedDates[sortedDates.length - 1] + 'T00:00:00');
+                 for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const dStr = `${y}-${m}-${day}`;
+                    let bestAgentInfo = { name: '-', sales: 0 };
+                    if (dailyAgentSalesMap.has(dStr)) {
+                        const dayAgentMap = dailyAgentSalesMap.get(dStr);
+                        let maxSales = -1;
+                        for (const [agentKey, val] of dayAgentMap.entries()) {
+                            if (val > maxSales) {
+                                maxSales = val;
+                                const storedName = agentsMap.get(agentKey)?.name || "Agente";
+                                bestAgentInfo = { name: storedName, sales: val };
+                            }
+                        }
+                    }
+                    dailyArray.push({ date: dStr, total: dailyMap.get(dStr) || 0, bestAgent: bestAgentInfo });
+                 }
+            }
+        }
+        const days = getPanamaBusinessDays(maxDate);
+        setBusinessDays({ total: days.totalBusinessDays, elapsed: days.elapsedBusinessDays });
+        rawDataArray.sort((a, b) => new Date(b.date) - new Date(a.date));
+        if(annualArray.length > 0 && user) {
+            const payload = { 
+                agents: agentsArray, 
+                annual: annualArray, 
+                daily: dailyArray, 
+                categories: categoriesArray,
+                currentYear: currentYear,
+                currentMonthName: currentMonthName,
+                rawData: rawDataArray
+            };
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'dashboard_metrics', 'current_period'), payload);
+            showNotification(`✅ Datos actualizados. Año: ${currentYear}, Mes: ${currentMonthName}`);
+        }
+      } catch (err) { showNotification("Error: " + err.message, 'error'); } 
+      finally { setIsUploading(false); setPendingFile(null); }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const confirmReplace = () => { setShowConfirmModal(false); if (pendingFile) processFile(pendingFile); };
+  const cancelReplace = () => { setShowConfirmModal(false); setPendingFile(null); };
 
   const { total: daysTotal, elapsed: daysElapsed } = businessDays;
   const goalMonthAgent = 15000;
@@ -778,20 +970,78 @@ export default function App() {
       }
   }
 
-  const customStyles = `...`; // (mismo que antes)
+  const customStyles = `
+    :root { --glass: rgba(255, 255, 255, 0.85); }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background: linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 100%); color: #1e293b; min-height: 100vh; }
+    .glass-card { background: var(--glass); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 24px; box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05); transition: all 0.4s ease; }
+    .glass-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -4px rgba(0, 0, 0, 0.05); }
+    .metric-mini-exec { background: rgba(255, 255, 255, 0.5); border: 1px solid rgba(255,255,255,0.6); border-radius: 16px; padding: 1rem; text-align: center; transition: all 0.3s; }
+    .metric-mini-exec:hover { background: #fff; transform: scale(1.02); border-color: #f59e0b; }
+    .fill-mode-forwards { animation-fill-mode: forwards; }
+    .custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .podium-bar { position: relative; overflow: hidden; }
+    .podium-bar::after {
+      content: '';
+      position: absolute;
+      top: -100%;
+      left: -50%;
+      width: 40%;
+      height: 200%;
+      background: linear-gradient(to right, transparent 0%, rgba(255,255,255,0.9) 50%, transparent 100%);
+      transform: skewX(-30deg);
+      animation: shine 4s linear infinite;
+    }
+    @keyframes shine { 0% { transform: translateX(-100%) skewX(-30deg); } 100% { transform: translateX(400%) skewX(-30deg); } }
+  `;
 
-  if (loading) return /* spinner */;
-  if (!user) return /* login */;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><i className="ph ph-spinner animate-spin text-amber-500 text-4xl"></i></div>;
+  if (!user) return <><style>{customStyles}</style><Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} /><LoginScreen onLoginGuest={handleLoginGuest} onLoginEmail={handleLoginEmail} /></>;
 
   return (
     <>
-      {/* estilos y modales */}
+      <style>{customStyles}</style>
+      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+      {isUploading && <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center"><i className="ph ph-spinner animate-spin text-white text-4xl mb-4"></i><p className="text-white font-bold">Procesando...</p></div>}
+      <ConfirmModal isOpen={showConfirmModal} title="Actualizar Datos" message="Se detectaron datos nuevos. ¿Deseas fusionarlos con el historial existente?" onCancel={cancelReplace} onConfirm={confirmReplace} />
+      <Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} />
+
       <div className="p-4 lg:p-8 animate-fade-in" id="dashboard-container">
         <div className="max-w-7xl mx-auto space-y-8">
-          {/* header igual */}
+          <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6" data-html2canvas-ignore="true">
+            <div className="space-y-1">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-900 rounded-xl shadow-lg shadow-slate-900/20">
+                  <i className="ph-fill ph-chart-line-up text-amber-500 text-2xl"></i>
+                </div>
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Tablero Directivo <span className="text-amber-600 ml-2 text-xl">{metrics.currentYear}</span></h1>
+              </div>
+              <p className="text-slate-500 font-medium ml-12">Analítica de Rendimiento y Control de Metas</p>
+            </div>
+            <div className="flex items-center gap-4">
+                <div className="bg-white/80 backdrop-blur p-1 rounded-xl border border-slate-200 flex shadow-sm">
+                    <button onClick={() => setView('dashboard')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${view === 'dashboard' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><i className="ph-bold ph-squares-four"></i> Tablero</button>
+                    <button onClick={() => setView('data')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${view === 'data' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><i className="ph-bold ph-table"></i> Base de Datos</button>
+                </div>
+                <div className="flex flex-wrap items-center gap-4 bg-white/60 backdrop-blur-md p-2 rounded-2xl border border-white/50">
+                {view === 'dashboard' && metrics.agents.length > 0 && (
+                    <button onClick={handleDownloadPDF} className="px-4 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-rose-500/20">
+                        <i className="ph-bold ph-file-pdf"></i> Descargar PDF
+                    </button>
+                )}
+                <label className="group cursor-pointer px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-xl shadow-slate-900/20 hover:shadow-slate-900/40 transform hover:-translate-y-0.5">
+                    <i className="ph ph-file-xls font-bold text-amber-500"></i><span>Importar</span>
+                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls, .csv" className="hidden" />
+                </label>
+                <button onClick={handleLogout} className="px-4 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 rounded-xl text-sm font-bold transition-all"><i className="ph-bold ph-sign-out"></i></button>
+                </div>
+            </div>
+          </header>
 
+          {/* === ESTADO SIN DATOS === */}
           {metrics.agents.length === 0 ? (
-            /* estado vacío mejorado */
             <div className="min-h-[70vh] flex flex-col justify-center items-center text-center bg-white/50 rounded-3xl border-2 border-dashed border-slate-300">
               <div className="p-8 bg-white rounded-full text-amber-500 shadow-2xl mb-8"><i className="ph-duotone ph-upload-simple text-7xl"></i></div>
               <h2 className="text-3xl font-black text-slate-800 mb-4">Tablero sin datos</h2>
@@ -802,12 +1052,150 @@ export default function App() {
               </label>
             </div>
           ) : view === 'data' ? (
-            /* vista data igual */
+            /* === VISTA DE DATOS / HISTÓRICO === */
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 animate-fade-in">
+              <div className="lg:col-span-1 space-y-6">
+                <div className="glass-card p-6 bg-slate-900 text-white border-slate-800">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                    <i className="ph-fill ph-archive"></i> Histórico en Firebase
+                  </h3>
+                  <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                    Estos son los años almacenados actualmente en la base de datos. Puedes eliminar años específicos si deseas limpiar el histórico.
+                  </p>
+                  <div className="space-y-2">
+                    {metrics.annual.sort((a,b) => b.year - a.year).map((item) => (
+                      <div key={item.year} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-colors group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-amber-500 text-slate-900 font-bold flex items-center justify-center text-xs shadow-lg shadow-amber-500/20">
+                            {item.year}
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-white">{formatCurrency(item.total)}</div>
+                            <div className="text-[10px] text-slate-400 uppercase">Venta Total</div>
+                          </div>
+                        </div>
+                        <button onClick={() => { if(window.confirm(`¿Estás seguro de eliminar el año ${item.year} del histórico?`)) { deleteYear(item.year); } }} className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors" title="Eliminar año">
+                          <i className="ph-bold ph-trash"></i>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="lg:col-span-3">
+                <div className="glass-card p-6 h-full">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                      <i className="ph-fill ph-database text-amber-500"></i> Última Carga (Raw Data)
+                    </h3>
+                    <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
+                      {metrics.rawData.length} registros (últimos 2000)
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto custom-scroll max-h-[70vh]">
+                    <table className="w-full text-sm text-left border-collapse">
+                      <thead className="bg-slate-50 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-4 py-3 font-bold text-slate-600 border-b">Fecha</th>
+                          <th className="px-4 py-3 font-bold text-slate-600 border-b">Asesor</th>
+                          <th className="px-4 py-3 font-bold text-slate-600 border-b text-right">Venta</th>
+                          <th className="px-4 py-3 font-bold text-slate-600 border-b">Categoría</th>
+                          <th className="px-4 py-3 font-bold text-slate-600 border-b text-right">Cantidad</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {metrics.rawData.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{row.date}</td>
+                            <td className="px-4 py-2 font-medium text-slate-800">{row.agent}</td>
+                            <td className="px-4 py-2 text-right font-bold text-emerald-600">{formatCurrency(row.sales)}</td>
+                            <td className="px-4 py-2 text-slate-500">{row.category}</td>
+                            <td className="px-4 py-2 text-right text-slate-500">{row.quantity}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {metrics.rawData.length === 0 && <div className="p-8 text-center text-slate-400">No hay datos crudos disponibles. Carga un archivo nuevamente.</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : (
+            /* === DASHBOARD PRINCIPAL === */
             <>
-              {/* tarjetas superiores */}
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                {/* ... tarjetas izquierdas */}
+                <div className="lg:col-span-3 flex flex-col gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className={`glass-card p-5 border-l-4 ${isCCAhead ? 'border-l-emerald-500' : 'border-l-rose-500'} flex items-center gap-5 relative overflow-hidden`}>
+                      <CircularProgress value={totalSales} max={goalCCToday} color={isCCAhead ? 'text-emerald-500' : 'text-rose-500'} size={76} />
+                      <div className="flex-1 z-10">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Ventas vs Meta Hoy ({metrics.currentYear})</p>
+                        <div className="flex flex-col">
+                          <span className="text-2xl font-black text-slate-900"><AnimatedCounter value={totalSales} prefix="$" /></span>
+                          <span className="text-[10px] font-bold text-slate-400 mt-1">Meta: {formatCurrency(goalCCToday)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="glass-card p-5 border-l-4 border-l-blue-600 flex flex-col justify-center relative overflow-hidden group">
+                      <div className="absolute right-0 top-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl -mr-8 -mt-8"></div>
+                      <div className="flex justify-between items-center mb-2 z-10">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Proyección de Cierre</p>
+                        <i className="ph-fill ph-chart-line-up text-blue-600 text-lg"></i>
+                      </div>
+                      <span className="text-2xl font-black text-slate-900 mb-2 z-10"><AnimatedCounter value={daysElapsed > 0 ? (totalSales / daysElapsed * daysTotal) : 0} prefix="$" /></span>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden flex z-10">
+                        <div className="bg-blue-600 h-full rounded-full animate-grow-up origin-left" style={{width: '70%'}}></div>
+                        <div className="bg-blue-300 h-full" style={{width: '30%'}}></div>
+                      </div>
+                    </div>
+                    <div className="glass-card p-5 border-l-4 border-l-slate-800 flex flex-col justify-center relative overflow-hidden">
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Pendiente</p>
+                        <i className="ph-fill ph-hourglass-high text-slate-800 text-lg"></i>
+                      </div>
+                      <span className="text-2xl font-black text-slate-900 mb-2"><AnimatedCounter value={Math.max(0, goalMonthCC - totalSales)} prefix="$" /></span>
+                      <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-slate-800 h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (Math.max(0, goalMonthCC - totalSales) / goalMonthCC) * 100)}%` }}></div>
+                      </div>
+                      <div className="mt-2 text-[10px] font-bold text-slate-500 text-right">
+                        Faltan <span className="text-slate-800">{daysTotal - daysElapsed}</span> días hábiles
+                      </div>
+                    </div>
+                  </div>
+                  <section className="glass-card p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <span className="w-6 h-[3px] bg-amber-500 rounded-full"></span> Métricas de Control
+                      </h3>
+                      <div className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500">
+                        Días: {daysElapsed} / {daysTotal}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="metric-mini-exec bg-amber-50/50 border-amber-200/50">
+                        <div className="text-[9px] font-extrabold text-amber-700 uppercase mb-1">Ritmo Esperado</div>
+                        <div className="text-xl font-black text-amber-600">{(paceRatio * 100).toFixed(0)}%</div>
+                      </div>
+                      <div className="metric-mini-exec">
+                        <div className="text-[9px] font-bold text-slate-400 uppercase mb-1">Meta Mes Agente</div>
+                        <div className="text-lg font-bold text-slate-800">{formatCurrency(goalMonthAgent)}</div>
+                      </div>
+                      <div className="metric-mini-exec">
+                        <div className="text-[9px] font-bold text-slate-400 uppercase mb-1">Meta Día Agente</div>
+                        <div className="text-lg font-bold text-slate-800">{formatCurrency(goalDailyAgent)}</div>
+                      </div>
+                      <div className="metric-mini-exec">
+                        <div className="text-[9px] font-bold text-slate-400 uppercase mb-1">Meta Mes CC</div>
+                        <div className="text-lg font-bold text-slate-800">{formatCurrency(goalMonthCC)}</div>
+                      </div>
+                      <div className="metric-mini-exec">
+                        <div className="text-[9px] font-bold text-slate-400 uppercase mb-1">Meta Día CC</div>
+                        <div className="text-lg font-bold text-slate-800">{formatCurrency(goalDailyCC)}</div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+                {/* Cuota de Mercado */}
                 <div className="lg:col-span-1">
                   <div className="glass-card p-8 h-full flex flex-col items-center justify-center relative overflow-hidden group hover:bg-white/95 transition-all">
                     <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl -mr-12 -mt-12 pointer-events-none"></div>
@@ -845,13 +1233,162 @@ export default function App() {
                 </div>
               </div>
 
-              {/* podium y ranking igual */}
+              {/* Podium y Ranking */}
+              <div className="glass-card overflow-hidden pb-6 mt-6">
+                <div className="p-6 bg-gradient-to-r from-white via-slate-50 to-white border-b border-slate-100">
+                  <h2 className="font-extrabold text-slate-800 flex items-center gap-2 text-lg justify-center md:justify-start">
+                    <i className="ph-fill ph-medal text-amber-500 text-2xl"></i>
+                    Ranking de Campeones ({metrics.currentYear})
+                  </h2>
+                </div>
+                <div className="bg-slate-50/50 border-b border-slate-100 mb-4">
+                  <Podium agents={processedAgents} />
+                </div>
+                <div className="overflow-x-auto px-6">
+                  <table className="w-full text-sm text-left border-collapse">
+                    <thead>
+                      <tr className="text-[10px] text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                        <th className="px-4 py-4 font-black">Asesor</th>
+                        <th className="px-4 py-4 font-black text-right">Venta Real</th>
+                        <th className="px-4 py-4 font-black text-right">Brecha</th>
+                        <th className="px-4 py-4 font-black text-center">Progreso</th>
+                        <th className="px-4 py-4 font-black text-center">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {processedAgents.map((agent, index) => {
+                        const percentage = agent.percent * 100;
+                        const standardPace = daysTotal > 0 ? (daysElapsed/daysTotal) * 100 : 0;
+                        const isAhead = percentage >= standardPace;
+                        const initials = getInitials(agent.name);
+                        return (
+                          <tr key={index} className="group transition-all hover:bg-slate-50">
+                            <td className="px-4 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 font-black text-xs flex items-center justify-center ring-2 ring-white shadow-sm">
+                                  {initials}
+                                </div>
+                                <div>
+                                  <span className="font-bold text-slate-700 block">{agent.name}</span>
+                                  <span className="text-[10px] text-slate-400 font-bold uppercase">Puesto #{index+1}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-right font-black text-slate-800 text-base">{formatCurrency(agent.sales)}</td>
+                            <td className={`px-4 py-4 text-right font-bold ${agent.diff >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                              {agent.diff >= 0 ? '+' : ''}{Math.round(agent.diff).toLocaleString('es-PA')}
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-24 bg-slate-100 rounded-full h-2 overflow-hidden shadow-inner">
+                                  <div className={`h-2 rounded-full transition-all duration-1000 ${isAhead ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{width: `${Math.min(percentage, 100)}%`}}></div>
+                                </div>
+                                <span className="text-[9px] font-black text-slate-400">{percentage.toFixed(1)}%</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${isAhead ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
+                                <i className={`ph-fill ${isAhead ? 'ph-check-circle' : 'ph-warning-circle'}`}></i>
+                                {isAhead ? 'En Meta' : 'Fuera de Meta'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
-              {/* ventas diarias igual */}
+              {/* Ventas Diarias */}
+              <section className="glass-card p-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/30">
+                      <i className="ph-bold ph-chart-line-up text-2xl"></i>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-extrabold text-slate-800">Ventas Diarias</h3>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Seguimiento Diario - <span className="text-amber-600">{metrics.currentMonthName}</span></p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className={`px-5 py-2.5 rounded-2xl border flex items-center gap-3 ${growthPct >= 0 ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
+                      <div className={`text-2xl ${growthPct >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        <i className={`ph-fill ${growthPct >= 0 ? 'ph-trend-up' : 'ph-trend-down'}`}></i>
+                      </div>
+                      <div>
+                        <div className={`text-lg font-black ${growthPct >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {growthPct > 0 ? '+' : ''}{growthPct.toFixed(1)}%
+                        </div>
+                        <div className="text-[9px] font-bold text-slate-400 uppercase">vs Día Anterior</div>
+                      </div>
+                    </div>
+                    <div className="px-5 py-2.5 rounded-2xl bg-white border border-slate-100 flex items-center gap-3 shadow-sm">
+                      <div className="text-2xl text-amber-500 animate-pulse-slow">
+                        <i className="ph-fill ph-trophy"></i>
+                      </div>
+                      <div>
+                        <div className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                          {bestAgentToday.name.split(' ')[0]}
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] text-slate-500 font-bold">{formatCurrency(bestAgentToday.sales)}</span>
+                        </div>
+                        <div className="text-[9px] font-bold text-slate-400 uppercase">MVP del Día</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="h-72 w-full relative"><canvas ref={lineChartRef}></canvas></div>
+              </section>
 
-              {/* categorías igual */}
+              {/* Categorías Top / Bajo */}
+              {top3Categories.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="glass-card overflow-hidden border-t-4 border-t-emerald-500">
+                    <div className="p-4 border-b border-slate-100 bg-emerald-50/30 flex justify-between items-center">
+                      <h3 className="font-bold text-emerald-900 flex items-center gap-2 text-sm uppercase tracking-wide">
+                        <i className="ph-fill ph-trophy text-emerald-500 text-lg"></i> Top Ventas (N2)
+                      </h3>
+                    </div>
+                    <div className="p-2">
+                      <table className="w-full text-sm">
+                        <tbody className="divide-y divide-slate-50">
+                          {top3Categories.map((cat, idx) => (
+                            <tr key={idx} className="hover:bg-emerald-50/20">
+                              <td className="px-4 py-3 font-bold text-slate-700 text-xs">{cat.name}</td>
+                              <td className="px-4 py-3 text-right text-slate-500 text-xs">{cat.quantity} und</td>
+                              <td className="px-4 py-3 text-right font-bold text-emerald-700">{formatCurrency(cat.sales)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div className="glass-card overflow-hidden border-t-4 border-t-rose-500">
+                    <div className="p-4 border-b border-slate-100 bg-rose-50/30 flex justify-between items-center">
+                      <h3 className="font-bold text-rose-900 flex items-center gap-2 text-sm uppercase tracking-wide">
+                        <i className="ph-fill ph-trend-down text-rose-500 text-lg"></i> Bajo Volumen (N2)
+                      </h3>
+                    </div>
+                    <div className="p-2">
+                      <table className="w-full text-sm">
+                        <tbody className="divide-y divide-slate-50">
+                          {bottom3Categories.map((cat, idx) => (
+                            <tr key={idx} className="hover:bg-rose-50/20">
+                              <td className="px-4 py-3 font-bold text-slate-700 text-xs">{cat.name}</td>
+                              <td className="px-4 py-3 text-right text-slate-500 text-xs">{cat.quantity} und</td>
+                              <td className="px-4 py-3 text-right font-bold text-rose-700">{formatCurrency(cat.sales)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              <div className="glass-card p-8 relative overflow-hidden">
+              {/* Evolución Histórica */}
+              <div className="glass-card p-8 relative overflow-hidden mt-8">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400"></div>
                 <h3 className="font-extrabold text-slate-800 flex items-center gap-3 mb-8 text-lg uppercase tracking-widest">
                   <i className="ph-fill ph-clock-counter-clockwise text-slate-500 text-xl"></i> Evolución Histórica
