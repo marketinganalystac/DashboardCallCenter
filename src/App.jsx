@@ -318,6 +318,71 @@ export default function App() {
     } catch (error) { console.error(error); }
   };
 
+  const handleDownloadPDF = async () => {
+    if (!window.html2canvas || !window.jspdf) {
+        showNotification("Librerías de PDF no cargadas. Intente nuevamente en unos segundos.", "error");
+        return;
+    }
+    
+    setIsUploading(true);
+    showNotification("Generando PDF, por favor espere...", "success");
+
+    try {
+        const element = document.getElementById('dashboard-container');
+        if (!element) throw new Error("No se encontró el contenido del tablero");
+
+        const canvas = await window.html2canvas(element, {
+            scale: 2, // Mejora la calidad
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#f1f5f9' // Mantiene el color de fondo
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        
+        // Orientación vertical (Portrait) o Horizontal (Landscape) - usaremos Landscape para mejor vista del tablero
+        const pdf = new jsPDF('p', 'mm', 'a4'); 
+        
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        
+        // Calcular ratio para ajustar al ancho de la página con márgenes
+        const margin = 10;
+        const availableWidth = pdfWidth - (margin * 2);
+        const ratio = availableWidth / imgWidth;
+        
+        const finalHeight = imgHeight * ratio;
+        
+        // Si el alto es mayor a la página, se ajustará (o podríamos dividir, pero pidieron 1 página)
+        // Para asegurar 1 sola página, usamos el ratio más restrictivo
+        const availableHeight = pdfHeight - (margin * 2);
+        const heightRatio = availableHeight / imgHeight;
+        
+        const finalRatio = Math.min(ratio, heightRatio); // Escoge el que ajuste mejor para que quepa todo
+        
+        const finalW = imgWidth * finalRatio;
+        const finalH = imgHeight * finalRatio;
+        
+        // Centrar
+        const x = (pdfWidth - finalW) / 2;
+        const y = margin;
+
+        pdf.addImage(imgData, 'PNG', x, y, finalW, finalH);
+        pdf.save(`Tablero_Directivo_${metrics.currentMonthName}_${metrics.currentYear}.pdf`);
+        
+        showNotification("PDF descargado exitosamente", "success");
+    } catch (err) {
+        console.error(err);
+        showNotification("Error al generar PDF: " + err.message, "error");
+    } finally {
+        setIsUploading(false);
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
     setDataLoading(true);
@@ -378,7 +443,9 @@ export default function App() {
       loadScript("https://cdn.jsdelivr.net/npm/chart.js"),
       loadScript("https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"),
       loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"),
-      loadScript("https://unpkg.com/@phosphor-icons/web")
+      loadScript("https://unpkg.com/@phosphor-icons/web"),
+      loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"),
+      loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")
     ]).then(() => {
       if (window.Chart && window.ChartDataLabels) {
         window.Chart.register(window.ChartDataLabels);
@@ -446,7 +513,7 @@ export default function App() {
       });
     }
 
-    // Bar Chart - Evolución Histórica (agrupadas, últimos 3 años, variación por agente en tooltip)
+    // Bar Chart - Evolución Histórica
     if (barChartRef.current) {
       if (barInstance.current) barInstance.current.destroy();
       let sortedYears = [...metrics.annual].sort((a, b) => a.year - b.year);
@@ -483,8 +550,10 @@ export default function App() {
           borderDash: [5, 5],
           pointRadius: 0,
           fill: false,
-          order: 0
+          order: 0,
+          datalabels: { display: false } // No mostrar etiqueta en la línea de meta para no saturar
       });
+      
       const ctxBar = barChartRef.current.getContext('2d');
       barInstance.current = new Chart(ctxBar, {
         type: 'bar',
@@ -492,6 +561,11 @@ export default function App() {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          layout: {
+            padding: {
+                top: 30, // Espacio extra arriba para las etiquetas
+            }
+          },
           scales: {
             y: { beginAtZero: true, stacked: false, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { callback: v => '$' + v/1000 + 'k', font: {size: 10} }, border: { display: false } },
             x: { stacked: false, grid: { display: false }, ticks: { font: {weight: 'bold'} } }
@@ -500,33 +574,18 @@ export default function App() {
               legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: {size: 10} } },
               datalabels: {
                 anchor: 'end',
-                align: 'end',
+                align: 'end', // Pone el valor ENCIMA de la barra
+                clip: false, // Permite que se salga del canvas si es necesario (y visible con el padding)
+                offset: -2,
                 font: {
                   size: 10,
                   weight: 'bold'
                 },
                 formatter: (value, ctx) => {
-                  if (ctx.dataset.type === 'line') return null;
-                  const index = ctx.dataIndex;
-                  let pctStr = '';
-                  if (index > 0) {
-                    const prev = ctx.dataset.data[index - 1];
-                    if (prev !== 0) {
-                      const pct = ((value - prev) / prev) * 100;
-                      const sign = pct >= 0 ? '+' : '';
-                      pctStr = '\n' + sign + pct.toFixed(1) + '%';
-                    }
-                  }
-                  return '$' + (value / 1000).toFixed(0) + 'k' + pctStr;
+                  if (ctx.dataset.type === 'line' || value === 0) return null;
+                  return '$' + (value / 1000).toFixed(1) + 'k';
                 },
-                color: (ctx) => {
-                  const index = ctx.dataIndex;
-                  if (index === 0) return '#333';
-                  const prev = ctx.dataset.data[index - 1];
-                  if (prev === 0) return '#333';
-                  const pct = ((ctx.dataset.data[index] - prev) / prev) * 100;
-                  return pct >= 0 ? '#10b981' : '#f43f5e';
-                }
+                color: '#334155' // Color oscuro para visibilidad
               },
               tooltip: {
                   callbacks: {
@@ -535,14 +594,6 @@ export default function App() {
                           if (label) label += ': ';
                           const currentVal = context.parsed.y;
                           label += new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentVal);
-                          if (context.dataIndex > 0 && context.dataset.type !== 'line') {
-                              const prevVal = context.dataset.data[context.dataIndex - 1];
-                              if (prevVal > 0) {
-                                  const diffPct = ((currentVal - prevVal) / prevVal) * 100;
-                                  const sign = diffPct >= 0 ? '+' : '';
-                                  label += ` (${sign}${diffPct.toFixed(1)}% vs ${yearsLabels[context.dataIndex-1]})`;
-                              }
-                          }
                           return label;
                       }
                   }
@@ -552,7 +603,7 @@ export default function App() {
       });
     }
 
-    // Line Chart - Ventas Diarias (Density Style + Triángulos dinámicos)
+    // Line Chart - Ventas Diarias
     if (lineChartRef.current) {
         if (lineInstance.current) lineInstance.current.destroy();
         const dailyDataPoints = metrics.daily; 
@@ -580,20 +631,23 @@ export default function App() {
                     tension: 0.45,
                     fill: true,
                     pointStyle: 'triangle',
-                    pointRadius: 7,
-                    pointHoverRadius: 10,
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
                     pointRotation: (ctx) => growthRates[ctx.dataIndex] >= 0 ? 0 : 180,
                     pointBackgroundColor: (ctx) => {
                         const g = growthRates[ctx.dataIndex];
                         return g >= 0 ? '#10b981' : '#f43f5e';
                     },
                     pointBorderColor: '#fff',
-                    pointBorderWidth: 2.5,
+                    pointBorderWidth: 2,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: {
+                    padding: { top: 25 }
+                },
                 scales: {
                     y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + (v/1000) + 'k' } },
                     x: { grid: { display: false }, ticks: { font: {size: 10} } }
@@ -602,21 +656,15 @@ export default function App() {
                     legend: { display: true, position: 'top' },
                     datalabels: {
                       anchor: 'end',
-                      align: 'top',
+                      align: 'top', // Encima del punto
                       offset: 4,
                       font: {
-                        size: 10,
+                        size: 9,
                         weight: 'bold'
                       },
                       formatter: (value, ctx) => {
-                        const idx = ctx.dataIndex;
-                        let gStr = '';
-                        if (idx > 0) {
-                          const g = growthRates[idx];
-                          const sign = g >= 0 ? '+' : '';
-                          gStr = '\n' + sign + g.toFixed(1) + '%';
-                        }
-                        return '$' + (value / 1000).toFixed(0) + 'k' + gStr;
+                        if (value === 0) return '';
+                        return '$' + (value / 1000).toFixed(1) + 'k';
                       },
                       color: (ctx) => {
                         const idx = ctx.dataIndex;
@@ -911,9 +959,9 @@ export default function App() {
       <ConfirmModal isOpen={showConfirmModal} title="Actualizar Datos" message="Se detectaron datos nuevos. ¿Deseas fusionarlos con el historial existente?" onCancel={cancelReplace} onConfirm={confirmReplace} />
       <Notification message={notification?.message} type={notification?.type} onClose={() => setNotification(null)} />
 
-      <div className="p-4 lg:p-8 animate-fade-in">
+      <div className="p-4 lg:p-8 animate-fade-in" id="dashboard-container">
         <div className="max-w-7xl mx-auto space-y-8">
-          <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+          <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6" data-html2canvas-ignore="true">
             <div className="space-y-1">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-slate-900 rounded-xl shadow-lg shadow-slate-900/20">
@@ -929,6 +977,11 @@ export default function App() {
                     <button onClick={() => setView('data')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${view === 'data' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><i className="ph-bold ph-table"></i> Base de Datos</button>
                 </div>
                 <div className="flex flex-wrap items-center gap-4 bg-white/60 backdrop-blur-md p-2 rounded-2xl border border-white/50">
+                {view === 'dashboard' && metrics.agents.length > 0 && (
+                    <button onClick={handleDownloadPDF} className="px-4 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-rose-500/20">
+                        <i className="ph-bold ph-file-pdf"></i> Descargar PDF
+                    </button>
+                )}
                 <label className="group cursor-pointer px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-xl shadow-slate-900/20 hover:shadow-slate-900/40 transform hover:-translate-y-0.5">
                     <i className="ph ph-file-xls font-bold text-amber-500"></i><span>Importar</span>
                     <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".xlsx, .xls, .csv" className="hidden" />
